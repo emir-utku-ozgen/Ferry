@@ -13,8 +13,10 @@ import {
 import { createSep31Transaction, type Sep31TransactionResult } from "@/lib/stellar/client/sep31Client";
 import type { FirmQuote } from "@/lib/stellar/client/sep38Client";
 import { NETWORK_PASSPHRASE } from "@/lib/stellar/config";
-import { buildChangeTrustXdr, hasTrustline, submitSignedTransaction } from "@/lib/stellar/trustline";
+import { buildChangeTrustXdr, describeLowReserveError, hasTrustline, submitSignedTransaction } from "@/lib/stellar/trustline";
 import { freighterErrorMessage } from "@/lib/stellar/freighterError";
+import { ApiError } from "@/lib/stellar/client/http";
+import type { FlowError, KycStatus } from "@/components/StatusTracker";
 
 const SEP24_ASSETS = [
   { code: "USDC", label: "USDC", issuer: "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5" },
@@ -41,6 +43,10 @@ interface BaseTransferProps {
   anchorDomain: string;
   token: string;
   lockedQuote: FirmQuote | null;
+  kycStatus: KycStatus;
+  onOpenKyc: () => void;
+  onTransferStatusChange: (status: string | null) => void;
+  onFlowError: (error: FlowError | null) => void;
 }
 
 interface TransferPanelProps extends BaseTransferProps {
@@ -53,15 +59,25 @@ function assetCodeFromSep38Asset(asset: string): string {
   return parts.length >= 2 ? parts[1] : asset;
 }
 
+/** Classifies a caught error into the FlowError shape StatusTracker renders a dedicated screen for. */
+function classifyTransferError(err: unknown): FlowError {
+  const message = err instanceof Error ? err.message : "Transfer failed";
+  if (err instanceof ApiError && err.code === "ANCHOR_REJECTED" && /bank|iban|account.number|routing/i.test(message)) {
+    return { type: "invalid_recipient_details", message };
+  }
+  return { type: "anchor_rejected", message };
+}
+
 /**
  * Step 4 of the flow: hands off to the anchor for the actual value
  * movement. SEP-24 opens the anchor-hosted deposit/withdrawal UI (all
  * KYC/funding details stay there) and polls for status; SEP-31 posts a
- * direct payment request and surfaces whatever the anchor returns —
- * including validation errors, since many anchors gate SEP-31 behind
- * out-of-band SEP-12 customer registration that Ferry doesn't perform.
+ * direct payment request after SEP-12 customer info has been accepted,
+ * using the locked SEP-38 quote so the recipient's net payout is
+ * guaranteed rather than re-priced at submission time.
  */
-export default function TransferPanel({ anchorDomain, publicKey, token, lockedQuote }: TransferPanelProps) {
+export default function TransferPanel(props: TransferPanelProps) {
+  const { anchorDomain, publicKey, token, lockedQuote, kycStatus, onOpenKyc, onTransferStatusChange, onFlowError } = props;
   const [mode, setMode] = useState<"sep24" | "sep31">("sep24");
 
   return (
@@ -85,9 +101,26 @@ export default function TransferPanel({ anchorDomain, publicKey, token, lockedQu
       </div>
 
       {mode === "sep24" ? (
-        <Sep24Panel anchorDomain={anchorDomain} publicKey={publicKey} token={token} lockedQuote={lockedQuote} />
+        <Sep24Panel
+          anchorDomain={anchorDomain}
+          publicKey={publicKey}
+          token={token}
+          lockedQuote={lockedQuote}
+          kycStatus={kycStatus}
+          onOpenKyc={onOpenKyc}
+          onTransferStatusChange={onTransferStatusChange}
+          onFlowError={onFlowError}
+        />
       ) : (
-        <Sep31Panel anchorDomain={anchorDomain} token={token} lockedQuote={lockedQuote} />
+        <Sep31Panel
+          anchorDomain={anchorDomain}
+          token={token}
+          lockedQuote={lockedQuote}
+          kycStatus={kycStatus}
+          onOpenKyc={onOpenKyc}
+          onTransferStatusChange={onTransferStatusChange}
+          onFlowError={onFlowError}
+        />
       )}
     </div>
   );
@@ -95,7 +128,7 @@ export default function TransferPanel({ anchorDomain, publicKey, token, lockedQu
 
 type TrustlineStatus = "unknown" | "checking" | "missing" | "present" | "error";
 
-function Sep24Panel({ anchorDomain, publicKey, token, lockedQuote }: TransferPanelProps) {
+function Sep24Panel({ anchorDomain, publicKey, token, lockedQuote, onTransferStatusChange }: TransferPanelProps) {
   const [direction, setDirection] = useState<"deposit" | "withdraw">("deposit");
   const [assetCode, setAssetCode] = useState<string>(
     lockedQuote ? assetCodeFromSep38Asset(lockedQuote.buy_asset) : SEP24_ASSETS[0].code
@@ -175,7 +208,7 @@ function Sep24Panel({ anchorDomain, publicKey, token, lockedQuote }: TransferPan
       if (err instanceof NotFoundError) {
         setTrustlineError("This account doesn't exist on Testnet yet. Fund it via Friendbot, then try again.");
       } else {
-        setTrustlineError(err instanceof Error ? err.message : "Failed to establish trustline");
+        setTrustlineError(describeLowReserveError(err) ?? (err instanceof Error ? err.message : "Failed to establish trustline"));
       }
     } finally {
       setEstablishingTrustline(false);
@@ -188,6 +221,7 @@ function Sep24Panel({ anchorDomain, publicKey, token, lockedQuote }: TransferPan
       try {
         const tx = await fetchSep24Transaction(anchorDomain, token, id);
         setStatus(tx);
+        onTransferStatusChange(tx.status);
         if (TERMINAL_STATUSES.has(tx.status) && pollRef.current) {
           clearInterval(pollRef.current);
           pollRef.current = null;
@@ -213,6 +247,7 @@ function Sep24Panel({ anchorDomain, publicKey, token, lockedQuote }: TransferPan
           ? await startSep24Deposit(anchorDomain, token, { asset_code: assetCode, account: publicKey, amount })
           : await startSep24Withdrawal(anchorDomain, token, { asset_code: assetCode, account: publicKey, amount });
       setSession(result);
+      onTransferStatusChange("incomplete");
       window.open(result.url, "_blank", "noopener,noreferrer,width=480,height=760");
       startPolling(result.id);
     } catch (err) {
@@ -329,16 +364,36 @@ function Sep24Panel({ anchorDomain, publicKey, token, lockedQuote }: TransferPan
   );
 }
 
-function Sep31Panel({ anchorDomain, token, lockedQuote }: BaseTransferProps) {
+function Sep31Panel({ anchorDomain, token, lockedQuote, kycStatus, onOpenKyc, onTransferStatusChange, onFlowError }: BaseTransferProps) {
   const [amount, setAmount] = useState(lockedQuote?.sell_amount ?? "10");
   const [assetCode, setAssetCode] = useState<string>(SEP24_ASSETS[0].code);
   const [result, setResult] = useState<Sep31TransactionResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (!lockedQuote) return;
+    const interval = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, [lockedQuote]);
+
+  const quoteExpired = lockedQuote ? now >= new Date(lockedQuote.expires_at).getTime() : false;
+  const kycRequired = kycStatus !== "ACCEPTED";
 
   async function send() {
+    if (lockedQuote && quoteExpired) {
+      setError("Your locked quote has expired. Return to the rate calculator and lock a fresh quote.");
+      onFlowError({ type: "quote_expired", message: `Quote ${lockedQuote.id} expired at ${lockedQuote.expires_at}.` });
+      return;
+    }
+    if (kycRequired) {
+      setError("Complete SEP-12 KYC before sending — see the KYC step above.");
+      return;
+    }
     setLoading(true);
     setError(null);
+    onFlowError(null);
     setResult(null);
     try {
       const tx = await createSep31Transaction(anchorDomain, token, {
@@ -349,8 +404,11 @@ function Sep31Panel({ anchorDomain, token, lockedQuote }: BaseTransferProps) {
         fields: {},
       });
       setResult(tx);
+      onTransferStatusChange("pending_external");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create SEP-31 transaction");
+      const message = err instanceof Error ? err.message : "Failed to create SEP-31 transaction";
+      setError(message);
+      onFlowError(classifyTransferError(err));
     } finally {
       setLoading(false);
     }
@@ -358,6 +416,15 @@ function Sep31Panel({ anchorDomain, token, lockedQuote }: BaseTransferProps) {
 
   return (
     <div className="mt-4 flex flex-col gap-4">
+      {lockedQuote && (
+        <div className="rounded-lg border border-white/10 bg-black/20 p-3">
+          <p className="text-[11px] text-zinc-500">Recipient will net (locked quote)</p>
+          <p className="text-lg font-semibold text-white">
+            {lockedQuote.buy_amount} {lockedQuote.buy_asset.startsWith("iso4217:") ? lockedQuote.buy_asset.split(":")[1] : lockedQuote.buy_asset}
+          </p>
+        </div>
+      )}
+
       <div className="flex gap-3">
         <label className="flex-1 text-xs text-zinc-500">
           Amount
@@ -371,7 +438,7 @@ function Sep31Panel({ anchorDomain, token, lockedQuote }: BaseTransferProps) {
           />
         </label>
         <label className="w-28 text-xs text-zinc-500">
-          Asset
+          Settlement asset
           <select
             value={assetCode}
             onChange={(e) => setAssetCode(e.target.value)}
@@ -385,21 +452,43 @@ function Sep31Panel({ anchorDomain, token, lockedQuote }: BaseTransferProps) {
           </select>
         </label>
       </div>
+      <p className="text-[10px] text-zinc-600">
+        Settlement asset is the Stellar token the sending anchor moves to the receiving anchor — separate from the
+        EUR/TRY fiat legs, which the locked quote above already fixes.
+      </p>
 
       {lockedQuote && <p className="text-[11px] text-zinc-600">Using locked quote {lockedQuote.id}</p>}
 
-      <button
-        onClick={send}
-        disabled={loading}
-        className="rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-black transition-colors hover:bg-zinc-200 disabled:opacity-50"
-      >
-        {loading ? "Sending…" : "Send via SEP-31"}
-      </button>
+      {lockedQuote && quoteExpired && (
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
+          <p className="text-xs font-semibold text-amber-300">Quote expired</p>
+          <p className="mt-1 text-[11px] text-amber-200/80">
+            Return to the rate calculator and lock a fresh quote before sending.
+          </p>
+        </div>
+      )}
+
+      {kycRequired ? (
+        <button
+          onClick={onOpenKyc}
+          className="rounded-lg border border-amber-400/40 bg-amber-400/10 px-4 py-2.5 text-sm font-semibold text-amber-200 transition-colors hover:bg-amber-400/20"
+        >
+          Complete SEP-12 KYC to enable sending
+        </button>
+      ) : (
+        <button
+          onClick={send}
+          disabled={loading || (lockedQuote != null && quoteExpired)}
+          className="rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-black transition-colors hover:bg-zinc-200 disabled:opacity-50"
+        >
+          {loading ? "Sending…" : "Send via SEP-31"}
+        </button>
+      )}
 
       <p className="text-[11px] leading-relaxed text-zinc-600">
-        SEP-31 receivers typically require the sender to have registered KYC information via SEP-12 first, which
-        Ferry does not implement. Expect (and this UI will surface) a validation error from the anchor unless
-        it has been configured to skip that step.
+        This reference test anchor requires SEP-12 customer records and — separately — a per-asset SEP-31 field
+        configuration it doesn&apos;t currently expose for every asset. A real anchor rejection here surfaces
+        below, unmasked, rather than being hidden.
       </p>
 
       {error && <p className="text-xs text-red-400">{error}</p>}

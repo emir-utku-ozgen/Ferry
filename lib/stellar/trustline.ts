@@ -51,3 +51,26 @@ export async function submitSignedTransaction(signedTransactionXdr: string) {
   const transaction = TransactionBuilder.fromXDR(signedTransactionXdr, NETWORK_PASSPHRASE);
   return server.submitTransaction(transaction);
 }
+
+/**
+ * Horizon rejects a `ChangeTrust` submission with a generic
+ * "Request failed with status code 400" on the thrown error's `.message`
+ * — the real reason (e.g. not enough XLM to cover the new trustline's
+ * reserve) is buried in `err.response.data.extras.result_codes`. This
+ * turns that into a message worth showing a user, or `null` if the
+ * failure isn't a reserve/balance issue so the caller can fall back to a
+ * generic message.
+ */
+export function describeLowReserveError(err: unknown): string | null {
+  const resultCodes = (err as { response?: { data?: { extras?: { result_codes?: Record<string, unknown> } } } })
+    ?.response?.data?.extras?.result_codes;
+  if (!resultCodes) return null;
+
+  const txCode = resultCodes.transaction;
+  const opCodes = Array.isArray(resultCodes.operations) ? (resultCodes.operations as string[]) : [];
+
+  if (txCode === "tx_insufficient_balance" || opCodes.includes("op_low_reserve")) {
+    return "Insufficient XLM to cover the trustline reserve (0.5 XLM) and network fee. Fund this account with more XLM and try again.";
+  }
+  return null;
+}

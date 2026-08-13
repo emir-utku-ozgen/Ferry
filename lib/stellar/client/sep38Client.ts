@@ -2,10 +2,17 @@ import { parseJsonOrThrow } from "./http";
 
 /** Browser-side calls into Ferry's `/api/sep38/*` orchestrator routes. */
 
+export interface Sep38Fee {
+  total: string;
+  asset: string;
+  details?: { name: string; description?: string; amount: string }[];
+}
+
 export interface IndicativePrice {
   price: string;
   sell_amount: string;
   buy_amount: string;
+  fee?: Sep38Fee;
 }
 
 export async function fetchIndicativePrice(
@@ -25,6 +32,7 @@ export interface FirmQuote {
   buy_asset: string;
   sell_amount: string;
   buy_amount: string;
+  fee?: Sep38Fee;
 }
 
 export async function fetchFirmQuote(

@@ -7,6 +7,7 @@ import {
   isAllowed,
   isConnected,
   requestAccess,
+  WatchWalletChanges,
 } from "@stellar/freighter-api";
 import { freighterErrorMessage } from "@/lib/stellar/freighterError";
 
@@ -15,15 +16,26 @@ interface WalletConnectProps {
   onDisconnect?: () => void;
 }
 
+const WATCH_INTERVAL_MS = 3000;
+
 /**
  * Connects to the user's Freighter wallet extension. Ferry never requests,
  * stores, or handles a secret key — `requestAccess` only ever returns a
  * public address, and all signing later happens inside the extension.
+ *
+ * Also watches for the account or network changing *inside* Freighter
+ * after connection (e.g. the user switches accounts without clicking
+ * Ferry's "Disconnect"). Without this, Ferry's UI would keep showing a
+ * stale address while any subsequent signature actually came from a
+ * different account — `onConnect` fires again with the new address so the
+ * caller (app/page.tsx) can invalidate any session state tied to the old
+ * one.
  */
 export default function WalletConnect({ onConnect, onDisconnect }: WalletConnectProps) {
   const [publicKey, setPublicKey] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [networkWarning, setNetworkWarning] = useState<string | null>(null);
 
   const connect = useCallback(async () => {
     setConnecting(true);
@@ -54,6 +66,7 @@ export default function WalletConnect({ onConnect, onDisconnect }: WalletConnect
   const disconnect = useCallback(() => {
     setPublicKey(null);
     setError(null);
+    setNetworkWarning(null);
     onDisconnect?.();
   }, [onDisconnect]);
 
@@ -76,14 +89,40 @@ export default function WalletConnect({ onConnect, onDisconnect }: WalletConnect
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Live sync: detect an account or network switch made inside Freighter
+  // itself while Ferry is already connected. Freighter has no push-based
+  // event for this, so WatchWalletChanges polls on our behalf.
+  useEffect(() => {
+    if (!publicKey) return;
+
+    const watcher = new WatchWalletChanges(WATCH_INTERVAL_MS);
+    watcher.watch(({ address, network, error: watchError }) => {
+      if (watchError) return;
+
+      if (address && address !== publicKey) {
+        setPublicKey(address);
+        onConnect?.(address);
+      }
+
+      setNetworkWarning(
+        network && network !== "TESTNET" ? `Freighter switched to ${network}. Switch back to Testnet to continue.` : null
+      );
+    });
+
+    return () => watcher.stop();
+  }, [publicKey, onConnect]);
+
   if (publicKey) {
     return (
-      <div className="flex items-center gap-3 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-4 py-2">
-        <span className="h-2 w-2 rounded-full bg-emerald-400" />
-        <span className="font-mono text-sm text-emerald-300">{truncateAddress(publicKey)}</span>
-        <button onClick={disconnect} className="text-xs text-zinc-400 transition-colors hover:text-zinc-200">
-          Disconnect
-        </button>
+      <div className="flex flex-col items-end gap-2">
+        <div className="flex items-center gap-3 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-4 py-2">
+          <span className="h-2 w-2 rounded-full bg-emerald-400" />
+          <span className="font-mono text-sm text-emerald-300">{truncateAddress(publicKey)}</span>
+          <button onClick={disconnect} className="text-xs text-zinc-400 transition-colors hover:text-zinc-200">
+            Disconnect
+          </button>
+        </div>
+        {networkWarning && <p className="max-w-xs text-right text-xs text-amber-400">{networkWarning}</p>}
       </div>
     );
   }

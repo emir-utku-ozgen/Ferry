@@ -20,10 +20,17 @@ export interface IndicativePriceParams {
   context: "sep6" | "sep31" | "sep24";
 }
 
+export interface Sep38Fee {
+  total: string;
+  asset: string;
+  details?: { name: string; description?: string; amount: string }[];
+}
+
 export interface IndicativePriceResponse {
   price: string;
   sell_amount: string;
   buy_amount: string;
+  fee?: Sep38Fee;
 }
 
 export interface FirmQuoteRequest extends IndicativePriceParams {
@@ -38,6 +45,7 @@ export interface FirmQuoteResponse {
   buy_asset: string;
   sell_amount: string;
   buy_amount: string;
+  fee?: Sep38Fee;
 }
 
 async function quoteServer(domain: string): Promise<string> {
