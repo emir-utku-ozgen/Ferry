@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requestChallenge } from "@/lib/stellar/sep10";
 import { toApiErrorResponse } from "@/lib/stellar/anchorError";
+import { checkRateLimit, rateLimitResponse } from "@/lib/rateLimit";
 
 /**
  * POST /api/sep10/challenge
@@ -16,6 +17,9 @@ import { toApiErrorResponse } from "@/lib/stellar/anchorError";
  * don't explicitly recognize, so omitting it is the safer default.
  */
 export async function POST(req: NextRequest) {
+  const rateLimit = checkRateLimit(req, "sep10-challenge");
+  if (!rateLimit.allowed) return rateLimitResponse(rateLimit);
+
   try {
     const { domain, account, homeDomain } = await req.json();
     if (!domain || !account) {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { initInteractiveDeposit } from "@/lib/stellar/sep24";
 import { toApiErrorResponse } from "@/lib/stellar/anchorError";
+import { checkRateLimit, rateLimitResponse } from "@/lib/rateLimit";
 
 /**
  * POST /api/sep24/deposit
@@ -11,6 +12,9 @@ import { toApiErrorResponse } from "@/lib/stellar/anchorError";
  * never sees the KYC or funding details submitted there.
  */
 export async function POST(req: NextRequest) {
+  const rateLimit = checkRateLimit(req, "sep24-deposit");
+  if (!rateLimit.allowed) return rateLimitResponse(rateLimit);
+
   try {
     const { domain, token, asset_code, account, amount } = await req.json();
     if (!domain || !token || !asset_code || !account) {

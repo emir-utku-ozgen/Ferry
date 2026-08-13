@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { submitSignedChallenge } from "@/lib/stellar/sep10";
 import { toApiErrorResponse } from "@/lib/stellar/anchorError";
+import { checkRateLimit, rateLimitResponse } from "@/lib/rateLimit";
 
 /**
  * POST /api/sep10/token
@@ -11,6 +12,9 @@ import { toApiErrorResponse } from "@/lib/stellar/anchorError";
  * token in memory only — Ferry's server never persists it.
  */
 export async function POST(req: NextRequest) {
+  const rateLimit = checkRateLimit(req, "sep10-token");
+  if (!rateLimit.allowed) return rateLimitResponse(rateLimit);
+
   try {
     const { domain, transaction } = await req.json();
     if (!domain || !transaction) {

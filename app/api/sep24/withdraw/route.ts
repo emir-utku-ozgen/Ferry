@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { initInteractiveWithdrawal } from "@/lib/stellar/sep24";
 import { toApiErrorResponse } from "@/lib/stellar/anchorError";
+import { checkRateLimit, rateLimitResponse } from "@/lib/rateLimit";
 
 /**
  * POST /api/sep24/withdraw
@@ -9,6 +10,9 @@ import { toApiErrorResponse } from "@/lib/stellar/anchorError";
  * Opens a SEP-24 interactive withdrawal session (anchor-hosted UI).
  */
 export async function POST(req: NextRequest) {
+  const rateLimit = checkRateLimit(req, "sep24-withdraw");
+  if (!rateLimit.allowed) return rateLimitResponse(rateLimit);
+
   try {
     const { domain, token, asset_code, account, amount } = await req.json();
     if (!domain || !token || !asset_code || !account) {

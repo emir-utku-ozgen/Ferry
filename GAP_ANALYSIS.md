@@ -40,7 +40,7 @@ Because a Stellar ledger, once closed by quorum agreement, is final, **there is 
 
 **Ferry's specific position relative to this guarantee:**
 
-- Ferry **never constructs or submits a value-transferring Stellar transaction**. `lib/stellar/config.ts` exposes a `getHorizonServer()` helper for future read-only queries, but no code path in the current application calls `submitTransaction()`.
+- Ferry **never constructs or submits a value-transferring Stellar transaction**. The one exception is `lib/stellar/trustline.ts`, which — as part of the Gap 4.3 pre-flight trustline check — builds, and submits via `getHorizonServer().submitTransaction()`, a `ChangeTrust` operation the user signs with Freighter before a non-native SEP-24 deposit. `ChangeTrust` only establishes or removes a trustline; it moves no value and has no counterparty, so it is a fixed operation type outside the double-spend threat model, not an exception to it.
 - The only transaction Ferry ever asks the user to sign is the **SEP-10 challenge transaction**, which is a non-value-transferring, anchor-issued authentication artifact (`sourceAccount` sequence number `0`, never submitted to the network). It cannot move funds and therefore cannot be double-spent in any meaningful sense.
 - Actual value movement happens in one of two places, both outside Ferry's code:
   1. **SEP-24**: the user funds the deposit (or receives the withdrawal) through the Anchor's own hosted interactive flow and the Anchor's infrastructure submits/receives the on-chain payment.

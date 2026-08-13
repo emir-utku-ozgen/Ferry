@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { postFirmQuote } from "@/lib/stellar/sep38";
 import { toApiErrorResponse } from "@/lib/stellar/anchorError";
+import { checkRateLimit, rateLimitResponse } from "@/lib/rateLimit";
 
 /**
  * POST /api/sep38/quote
@@ -11,6 +12,9 @@ import { toApiErrorResponse } from "@/lib/stellar/anchorError";
  * SEP-24/31 transfer step to lock in the rate.
  */
 export async function POST(req: NextRequest) {
+  const rateLimit = checkRateLimit(req, "sep38-quote");
+  if (!rateLimit.allowed) return rateLimitResponse(rateLimit);
+
   try {
     const { domain, token, ...payload } = await req.json();
     if (!domain || !token) {

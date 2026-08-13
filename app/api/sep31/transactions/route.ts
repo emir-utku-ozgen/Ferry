@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createSep31Transaction, getSep31Transaction } from "@/lib/stellar/sep31";
 import { toApiErrorResponse } from "@/lib/stellar/anchorError";
+import { checkRateLimit, rateLimitResponse } from "@/lib/rateLimit";
 
 /**
  * POST /api/sep31/transactions
@@ -10,6 +11,9 @@ import { toApiErrorResponse } from "@/lib/stellar/anchorError";
  * anchor. Typically called after a SEP-38 firm quote has been obtained.
  */
 export async function POST(req: NextRequest) {
+  const rateLimit = checkRateLimit(req, "sep31-transactions-post");
+  if (!rateLimit.allowed) return rateLimitResponse(rateLimit);
+
   try {
     const { domain, token, ...payload } = await req.json();
     if (!domain || !token) {
@@ -29,6 +33,9 @@ export async function POST(req: NextRequest) {
  * Looks up the status of a previously created SEP-31 transaction.
  */
 export async function GET(req: NextRequest) {
+  const rateLimit = checkRateLimit(req, "sep31-transactions-get");
+  if (!rateLimit.allowed) return rateLimitResponse(rateLimit);
+
   const { searchParams } = new URL(req.url);
   const domain = searchParams.get("domain");
   const token = searchParams.get("token");
