@@ -1,6 +1,6 @@
-# Ferry — Security, Architectural & Protocol Gap Analysis
+# Ferry — Security & Architectural Assessment
 
-**Document type:** Internal engineering assessment
+**Document type:** Engineering security assessment
 **Scope:** `Ferry` remittance orchestration application (Next.js / TypeScript / Stellar SDK)
 **Network:** Stellar Testnet (pre-Mainnet)
 
@@ -8,53 +8,53 @@
 
 ## 1. Executive Summary
 
-Ferry is a **strictly non-custodial remittance orchestrator** built on top of four Stellar Ecosystem Proposals — **SEP-10** (Web Authentication), **SEP-24** (Hosted Deposit/Withdrawal), **SEP-31** (Direct Cross-Border Payments), and **SEP-38** (Anchor Quotes). Its role is deliberately narrow: Ferry discovers anchor capabilities (SEP-1), negotiates authentication and pricing on the user's behalf, and hands off every value-moving and identity-verifying step to a licensed, regulated Anchor or to the user's own Freighter wallet.
+Ferry is a **strictly non-custodial remittance orchestrator** built on four Stellar Ecosystem Proposals — **SEP-10** (Web Authentication), **SEP-24** (Hosted Deposit/Withdrawal), **SEP-31** (Direct Cross-Border Payments), and **SEP-38** (Anchor Quotes). Its role is deliberately narrow: Ferry discovers anchor capabilities via SEP-1, negotiates authentication and pricing on the user's behalf, and hands off every value-moving and identity-verifying step to a licensed, regulated Anchor or to the user's own Freighter wallet.
 
-At no point in the current architecture does Ferry:
+At no point does Ferry:
 
 - hold, generate, or transmit a private key or secret seed,
 - custody user funds in an application-controlled account,
 - collect, store, or transmit KYC/identity documents, or
-- independently construct and submit a value-transferring Stellar transaction.
+- construct or submit a value-transferring Stellar transaction on the user's behalf.
 
-This positions Ferry closer to a **protocol-aware API gateway and UI layer** than to a financial intermediary. That narrow scope is itself the primary security control: the attack surface for fund loss is largely delegated to Freighter (client-side signing) and the Anchor (custody, KYC, settlement), both of which are independently regulated/audited components outside Ferry's trust boundary.
+This makes Ferry, architecturally, a **protocol-aware API gateway and UI layer** rather than a financial intermediary. That narrow scope is itself the primary security control: the attack surface for fund loss is delegated to Freighter (client-side signing) and the Anchor (custody, KYC, settlement) — both independently regulated components outside Ferry's trust boundary.
 
-This document assesses Ferry against three lenses — **consensus/settlement correctness**, **custody and fund safety**, and **application-layer security hygiene** — and enumerates the concrete gaps that must be closed before a Mainnet production launch. Findings are graded by current implementation state, not by aspiration; several gaps below represent explicit, accepted technical debt for the current Testnet-only phase.
+This document assesses Ferry's current implementation across four dimensions — **consensus/settlement correctness**, **custody and fund safety**, **application-layer security controls**, and **Mainnet production readiness** — as it stands today, not as a record of how it got here.
 
 ---
 
 ## 2. Consensus & Double-Spending Analysis
 
-**Finding: L1 double-spending is not an applicable threat at the application layer.**
+**Finding: L1 double-spending is not an applicable threat at Ferry's application layer.**
 
-Double-spending is a settlement-layer problem, and Stellar's settlement layer is the **Stellar Consensus Protocol (SCP)**, a Federated Byzantine Agreement (FBA) system — not a Proof-of-Work chain. This distinction matters directly for how Ferry is architected:
+Double-spending is a settlement-layer problem, and Stellar's settlement layer is the **Stellar Consensus Protocol (SCP)** — a Federated Byzantine Agreement (FBA) system, not a Proof-of-Work chain. This distinction is structural, not incidental, to how Ferry is built:
 
 | Property | Proof-of-Work chains | Stellar (SCP) | Implication for Ferry |
 |---|---|---|---|
-| Finality | Probabilistic (confirmation depth) | **Deterministic**, per ledger close | No "N confirmations" logic needed anywhere in Ferry |
+| Finality | Probabilistic (confirmation depth) | **Deterministic**, per ledger close | No "N confirmations" logic anywhere in Ferry |
 | Reorg risk | Non-zero, grows with attacker hash power | Effectively none once a ledger closes | No reorg-handling / rollback logic required |
-| Ledger close time | Minutes (BTC ~10 min) | **~5 seconds** | Anchor-reported transaction status (SEP-24 polling) reflects settled state almost immediately |
-| Double-spend vector | Competing chains, 51% attacks | Quorum-slice agreement prevents conflicting ledgers from being validated | Out of scope for any application built on top of Horizon/SCP |
+| Ledger close time | Minutes (BTC ~10 min) | **~5 seconds** | SEP-24 transaction status polling reflects settled state almost immediately |
+| Double-spend vector | Competing chains, 51% attacks | Quorum-slice agreement prevents conflicting ledgers from validating | Out of scope for any application built on top of Horizon/SCP |
 
-Because a Stellar ledger, once closed by quorum agreement, is final, **there is no window in which the same signed transaction can be validly replayed to spend the same funds twice** at the protocol layer. This is a guarantee provided by the network itself, not by application code — identical to how a web application does not need to re-implement TCP's retransmission logic.
+Because a Stellar ledger, once closed by quorum agreement, is final, **there is no window in which a validly signed transaction can be replayed to spend the same funds twice** at the protocol layer. This guarantee is provided by the network, not by application code — analogous to a web application not needing to reimplement TCP's retransmission and ordering guarantees.
 
-**Ferry's specific position relative to this guarantee:**
+**How Ferry's transaction surface fits this model.** Ferry constructs and asks the user to sign exactly two categories of Stellar transaction, and both are structurally incapable of double-spending because neither transfers value:
 
-- Ferry **never constructs or submits a value-transferring Stellar transaction**. The one exception is `lib/stellar/trustline.ts`, which — as part of the Gap 4.3 pre-flight trustline check — builds, and submits via `getHorizonServer().submitTransaction()`, a `ChangeTrust` operation the user signs with Freighter before a non-native SEP-24 deposit. `ChangeTrust` only establishes or removes a trustline; it moves no value and has no counterparty, so it is a fixed operation type outside the double-spend threat model, not an exception to it.
-- The only transaction Ferry ever asks the user to sign is the **SEP-10 challenge transaction**, which is a non-value-transferring, anchor-issued authentication artifact (`sourceAccount` sequence number `0`, never submitted to the network). It cannot move funds and therefore cannot be double-spent in any meaningful sense.
-- Actual value movement happens in one of two places, both outside Ferry's code:
-  1. **SEP-24**: the user funds the deposit (or receives the withdrawal) through the Anchor's own hosted interactive flow and the Anchor's infrastructure submits/receives the on-chain payment.
-  2. **SEP-31**: the sending Anchor transmits funds to the receiving Anchor's Stellar account directly; Ferry only relays the transaction metadata (`quote_id`, `amount`, `asset_code`) used to initiate that transfer.
+1. **SEP-10 challenge transactions** (`lib/stellar/sep10.ts`). These are anchor-issued authentication artifacts with `sourceAccount` sequence number `0`; they are signed by the user for identity proof and are **never submitted to the network**. There is no ledger entry to replay.
+2. **`ChangeTrust` operations** (`lib/stellar/trustline.ts`). As part of the pre-flight trustline check ahead of a non-native SEP-24 deposit, Ferry builds a `ChangeTrust` transaction, has the user sign it with Freighter, and submits it via `getHorizonServer().submitTransaction()`. `ChangeTrust` only establishes or removes a trustline between an account and an asset issuer — it has no counterparty and moves no value. It is the one Stellar transaction type Ferry submits directly, and it sits outside the double-spend threat model by construction rather than as an exception to it.
 
-**Residual consideration — not double-spending, but replay/reuse of the SEP-10 JWT:** the actual risk analogous to "double spend" in Ferry's trust boundary is **session-token replay**, not ledger replay. That is addressed under §4.1 below.
+**Actual value movement happens entirely outside Ferry's code**, in one of two places:
+
+- **SEP-24**: the user funds a deposit (or receives a withdrawal) through the Anchor's own hosted interactive UI; the Anchor's infrastructure constructs and submits the on-chain payment.
+- **SEP-31**: the sending Anchor transmits funds directly to the receiving Anchor's Stellar account; Ferry only relays transaction metadata (`quote_id`, `amount`, `asset_code`) used to initiate that transfer.
+
+**The residual risk analogous to "double spend" in Ferry's trust boundary is session-token replay, not ledger replay** — i.e., reuse of a captured SEP-10 JWT rather than reuse of a signed transaction. That risk is addressed under §4.4 (Session Architecture).
 
 ---
 
 ## 3. Custody & Fund Safety
 
-**Model: Zero-custody by construction.**
-
-Ferry implements a strict separation of concerns such that at no point does the application hold a position of trust over user funds or identity data:
+**Model: zero-custody by construction.**
 
 ```
 ┌──────────────┐        SEP-10 (sign only)        ┌──────────────┐
@@ -71,43 +71,70 @@ Ferry implements a strict separation of concerns such that at no point does the 
 └────────────────────────────────────────────────────────────────┘
 ```
 
-**Concretely, in the current codebase:**
+**Private keys.** Never requested, received, or persisted anywhere in Ferry. `components/WalletConnect.tsx` calls `@stellar/freighter-api`'s `requestAccess()` / `getAddress()`, both of which return only a public address. Every signature — the SEP-10 challenge, the `ChangeTrust` operation — is produced inside the Freighter browser extension's isolated context via `signTransaction()`; the raw or encrypted secret key never enters Ferry's JavaScript execution context, client or server.
 
-- **Private keys**: never requested, received, or persisted. `components/WalletConnect.tsx` calls `@stellar/freighter-api`'s `requestAccess()` / `getAddress()`, which return only a public address. All signing (`signTransaction`) happens inside the Freighter browser extension's isolated context.
-- **Identity documents / KYC**: never collected by Ferry. SEP-24 interactive sessions (`lib/stellar/sep24.ts`) return an Anchor-hosted `url` that is opened directly in a new window (`components/TransferPanel.tsx`); any personal data the user submits there goes straight to the Anchor and is never proxied through, or visible to, Ferry's servers.
-- **Funds**: Ferry holds no Stellar account of its own in the transfer path and is not a counterparty to any payment. The `DIRECT_PAYMENT_SERVER` (SEP-31) settlement account belongs to the receiving Anchor, discovered via SEP-1 (`lib/stellar/toml.ts`), not to Ferry.
-- **Secrets at rest**: `CLAUDE.md` and `.env.local.example` explicitly prohibit hardcoded private keys/seeds; all configuration is public network parameters (Horizon URL, network passphrase, anchor domain) suitable for client-side exposure via `NEXT_PUBLIC_*`.
+**Identity documents / KYC.** Never collected, stored, or proxied by Ferry. A SEP-24 interactive session (`lib/stellar/sep24.ts`) returns an Anchor-hosted `url`, which `components/TransferPanel.tsx` opens directly in a new browser window. Any personal or financial data the user submits there goes straight to the Anchor's own servers and is never visible to, or transits through, Ferry's backend.
 
-**What this model does *not* eliminate** — and what the remainder of this document focuses on — is Ferry's responsibility as a **trusted intermediary for session integrity and availability**. Even without custody, a compromised or degraded Ferry instance could still cause user harm (e.g., session hijacking, denial of service, or silently forwarding a request to a malicious "anchor" domain). Those are the real residual risks addressed below.
+**Funds.** Ferry holds no Stellar account of its own in the transfer path and is not a counterparty to any payment. The SEP-31 `DIRECT_PAYMENT_SERVER` settlement account belongs to the receiving Anchor, discovered via SEP-1 TOML resolution (`lib/stellar/toml.ts`) — never to Ferry.
+
+**Secrets at rest.** `CLAUDE.md` and `.env.local.example` explicitly prohibit hardcoded private keys or seeds. Every environment variable Ferry defines is public network configuration (Horizon URL, network passphrase, anchor domain) suitable for client-side exposure via `NEXT_PUBLIC_*` — there is no server-side secret store because there is no server-side secret to store.
+
+**What zero-custody does *not* eliminate.** Ferry is still a **trusted intermediary for session integrity and service availability**. A compromised or degraded Ferry instance cannot steal funds directly, but it could still cause real user harm — session hijacking, denial of service against legitimate users, or relaying a request to an attacker-controlled "anchor" domain. Section 4 evaluates the controls Ferry has in place against exactly those residual risks.
 
 ---
 
-## 4. Application-Level Gap Analysis
+## 4. Application-Level Security Controls (Current Architecture)
 
-The table below reflects the **actual current implementation** (verified against the codebase, not assumed), the gap relative to production-grade practice, and the recommended mitigation.
+### 4.1 Request Timeouts & Error Taxonomy
 
-| # | Area | Current State | Identified Gap | Risk / Impact | Mitigation Strategy |
-|---|---|---|---|---|---|
-| 4.1 | **Session Token Storage** | The SEP-10 JWT is held **only in in-memory React state** (`app/page.tsx` → `useState<string \| null>`), never written to `localStorage`, `sessionStorage`, or a cookie. It is lost on refresh and passed explicitly as a function argument to every orchestrator call. | No persistence is actually a *partial* mitigation already, but the token is still: (a) visible to any script executing in the page (XSS-reachable, since it transits JS memory and component props), and (b) re-requested from the anchor on every page load with no refresh/revocation path. There is currently no `HttpOnly` cookie option because Ferry's API routes are stateless proxies with no server-side session store. | An XSS vulnerability anywhere in the render tree (including a compromised dependency) could exfiltrate a live JWT and impersonate the user's authenticated session against the Anchor for the JWT's validity window (anchor-defined, typically ~24h). | Introduce a **BFF (Backend-for-Frontend) session pattern**: after SEP-10 token exchange, have the Next.js server set an **`HttpOnly`, `Secure`, `SameSite=Strict` cookie** containing either the JWT itself or an opaque session ID mapped to it server-side (e.g., in Redis/Upstash). All subsequent `/api/sep24`, `/api/sep31`, `/api/sep38` calls would read the token server-side from the cookie rather than accepting it as a client-supplied body parameter as they do today. This closes the XSS-exfiltration path entirely, at the cost of adding server-side session state. |
-| 4.2 | **API Rate Limiting & DoS Prevention** | **No rate limiting exists.** There is no `middleware.ts`, no dependency on a rate-limiting library (`upstash/ratelimit`, `express-rate-limit`, etc.), and no per-IP or per-account throttling on any of the eight `/api/sep{10,24,31,38}/*` routes. | Every orchestrator route performs at least one outbound network call (SEP-1 TOML resolution, anchor API call) per inbound request, with **no caching beyond the in-process TOML `Map` cache** (`lib/stellar/toml.ts`) and **no request deduplication or budget**. A single client can trigger unbounded fan-out traffic to third-party anchor infrastructure. | (a) **Self-DoS**: a scripted or buggy client can exhaust Ferry's outbound connection pool or hit anchor-side rate limits, degrading service for all users. (b) **Anchor-facing abuse**: Ferry could be used as an open relay to hammer an arbitrary anchor domain (SSRF-adjacent — see 4.2a). (c) **Cost/availability**: no protection against credential-stuffing style repeated SEP-10 challenge requests. | Add edge-level rate limiting via Next.js `middleware.ts` backed by a shared store (Vercel Edge Config / Upstash Redis) with per-IP and, post-authentication, per-account (public key) limits — e.g., 5 challenge requests/min, 20 quote requests/min. Additionally, **allowlist the anchor `domain` parameter** against a configured set of known anchors (or at minimum validate it resolves to a well-formed `stellar.toml`) rather than accepting any client-supplied domain string, to close the open-relay/SSRF vector at its root. |
-| 4.3 | **Automated Trustline Verification** | **Not implemented.** `components/TransferPanel.tsx` lets a user request a SEP-24 deposit of a non-native asset (e.g., USDC) into their connected account without checking, before opening the interactive session, whether that account has an established trustline to the asset being deposited. | If the destination account lacks the required trustline, the anchor-side deposit will fail after the user has already completed KYC/funding steps in the hosted UI — a poor and confusing UX failure discovered too late in the flow, and in the worst case funds can become stuck pending manual anchor intervention or a refund cycle. | Before invoking `startSep24Deposit`, query the account's balances via Horizon (`getHorizonServer().loadAccount(publicKey)`, already scaffolded in `lib/stellar/config.ts` but unused) and verify a trustline exists for the target asset/issuer. If absent, prompt the user to submit a `ChangeTrust` operation (signed via Freighter) **before** starting the interactive deposit session, or surface a clear pre-flight warning. This is pure client-side + Horizon read logic and does not compromise the non-custodial model. |
-| 4.4 | **Anchor Timeout & Error Handling** | Every anchor-facing `fetch()` call in `lib/stellar/{sep10,sep24,sep31,sep38,toml}.ts` has **no explicit timeout** (no `AbortController`/`AbortSignal.timeout()`), and error handling is limited to checking `res.ok` and surfacing the anchor's raw error body via a generic `502`. | (a) A slow or hanging anchor endpoint will hold the Next.js API route (and the underlying serverless/edge function invocation) open indefinitely, consuming compute time and degrading Ferry's own availability. (b) There is no retry/backoff for transient failures, and no distinction between "anchor is down," "anchor rejected the request," and "network partition" in the error surfaced to the UI — all collapse to a single error string rendered in components like `RemittanceFlow.tsx` and `TransferPanel.tsx`. | Wrap all anchor-facing `fetch()` calls with a bounded `AbortSignal.timeout(10_000)` (or route-appropriate value), map failures into a small typed error taxonomy (`ANCHOR_TIMEOUT`, `ANCHOR_UNAVAILABLE`, `ANCHOR_REJECTED`, `NETWORK_ERROR`), and apply limited retry-with-backoff for idempotent `GET` calls (SEP-1 TOML resolution, SEP-38 indicative pricing, SEP-24 transaction status polling). Non-idempotent calls (SEP-10 token exchange, SEP-31 transaction creation) should **not** be auto-retried without idempotency keys, to avoid duplicate transaction creation at the anchor. |
+Every anchor-facing network call in Ferry — across `lib/stellar/sep10.ts`, `sep24.ts`, `sep31.ts`, `sep38.ts`, and `toml.ts` — is routed through a shared `anchorFetch()` wrapper (`lib/stellar/anchorFetch.ts`) rather than calling the global `fetch()` directly.
+
+- **Bounded execution.** `anchorFetch()` attaches `AbortSignal.timeout(ANCHOR_TIMEOUT_MS)` (10 seconds, `lib/stellar/anchorError.ts`) to every request. A slow or hanging anchor endpoint can no longer hold an `/api/*` route handler open indefinitely; the request is aborted deterministically at the timeout boundary. The SEP-1 TOML resolver (`StellarToml.Resolver.resolve`, called from `toml.ts`) receives the same bound via its own `timeout` option, since it doesn't go through `fetch()`.
+- **Typed failure taxonomy.** Every failure is normalized into an `AnchorError` carrying one of four codes — `ANCHOR_TIMEOUT`, `ANCHOR_UNAVAILABLE` (5xx from the anchor), `ANCHOR_REJECTED` (4xx from the anchor, status passed through), or `NETWORK_ERROR` (DNS/connection failure). `toAnchorError()` performs this classification for both raw `fetch()` rejections and the TOML resolver's own error shape.
+- **Status-aware API responses.** Each `/api/sep{10,24,31,38}/*` route maps the caught `AnchorError` to an HTTP status via `toApiErrorResponse()`: timeouts surface as `504`, anchor-side outages as `502`, and anchor rejections pass through their real status code (e.g., a `403` from a bad token is returned as `403`, not folded into a generic `502`). The JSON body always includes both `error` (human-readable) and `code` (machine-readable), so the UI and any future client can branch on failure type instead of parsing message strings.
+
+The net effect: an anchor that is slow, down, or actively rejecting requests produces a bounded, typed, correctly-coded response — never an indefinite hang and never an opaque `502` that collapses distinct failure modes into one.
+
+### 4.2 Automated Pre-flight Trustline Checks
+
+SEP-24 deposits of a non-native Stellar asset (e.g., USDC) require the destination account to already hold a trustline to that asset; without one, the deposit would otherwise fail only *after* the user completes the anchor's hosted KYC/funding flow. Ferry closes that gap client-side, before the interactive session is ever opened.
+
+- **Read path.** `hasTrustline()` (`lib/stellar/trustline.ts`) calls `getHorizonServer().loadAccount(publicKey)` and checks the account's balance lines for the target `asset_code`/`asset_issuer` pair. An account that doesn't exist on the network yet (never funded) is treated as simply having no trustlines, rather than raising an error.
+- **UI gating.** `components/TransferPanel.tsx` runs this check automatically whenever the selected deposit asset or connected account changes. While a non-native asset lacks a trustline, the "Start Hosted Deposit" action is disabled and an inline pre-flight alert explains the requirement — the anchor's popup is never opened into a state that's already guaranteed to fail.
+- **Remediation path.** `buildChangeTrustXdr()` constructs the unsigned `ChangeTrust` transaction; the user signs it via Freighter's `signTransaction()`; `submitSignedTransaction()` posts it to Horizon. On confirmation, the UI re-enables the deposit action. As established in §2, this operation moves no value and introduces no custody or double-spend exposure — it is a pure account-configuration change, signed and submitted entirely by the user's own wallet flow.
+
+### 4.3 API Rate Limiting & DoS Protection
+
+All eight `/api/sep{10,24,31,38}/*` orchestrator routes are rate limited per client IP via `lib/rateLimit.ts`, an in-memory, fixed-window counter keyed by `(route name, IP)`.
+
+- **Defaults.** Ten requests per 60-second window per IP, per route, is the default (`checkRateLimit()`). Exceeding it returns a clean `429` (`rateLimitResponse()`) with `Retry-After`, `X-RateLimit-Limit`, `X-RateLimit-Remaining`, and `X-RateLimit-Reset` headers, plus a `{ error, code: "RATE_LIMITED" }` JSON body.
+- **Polling-aware exception.** `/api/sep24/transaction` is limited at 30 requests/minute rather than the default 10. `components/TransferPanel.tsx` polls this endpoint every 4 seconds while a deposit or withdrawal is in flight — roughly 15 requests/minute of expected, legitimate traffic from Ferry's own UI. The higher ceiling leaves headroom above that real usage while still bounding an actor polling arbitrarily fast.
+- **Per-route isolation.** Buckets are keyed independently per route, so exhausting the limit on one endpoint (e.g., repeated SEP-38 price lookups) does not affect a user's ability to call a different endpoint (e.g., SEP-10 authentication) in the same window.
+- **Known scope boundary.** This is a **single-process, in-memory** limiter: correct and effective for a single running instance, but it does not share state across multiple horizontally-scaled instances. A multi-instance production deployment requires a shared backing store (Upstash Redis, Vercel Edge Config, or equivalent) — tracked in the roadmap below, not implemented here.
+
+### 4.4 Session Architecture
+
+The SEP-10 JWT — the only artifact standing in for an authenticated session — is held **exclusively in-memory**, as React `useState` in `app/page.tsx` (`sep10Token`). It is never written to `localStorage`, `sessionStorage`, or a cookie, and is lost on every page refresh, requiring re-authentication.
+
+This has a real, deliberate benefit: nothing persists the token across browser sessions or tabs, and there is no server-side session store to compromise (consistent with §3's zero-custody, no-secret-store posture). It also has a real limitation: for as long as the token lives in page memory, it is reachable by any script executing in that page's JavaScript context. An XSS vulnerability anywhere in the render tree — including in a compromised third-party dependency — could exfiltrate a live JWT and impersonate the user's session against the Anchor for the remainder of that token's anchor-defined validity window.
+
+**Recommendation for Mainnet.** Move to a **BFF (Backend-for-Frontend) session pattern**: after SEP-10 token exchange, have the Next.js server set an `HttpOnly`, `Secure`, `SameSite=Strict` cookie containing either the JWT itself or an opaque session identifier resolved server-side against a session store (Redis/Upstash). Subsequent calls to `/api/sep24`, `/api/sep31`, and `/api/sep38` would read the token server-side from that cookie rather than accepting it as a client-supplied parameter, as they do today. This closes the XSS-exfiltration path at the cost of introducing server-side session state — a tradeoff worth making once Ferry is handling Mainnet value, but not before.
 
 ---
 
 ## 5. Production Readiness Roadmap
 
-Ferry's current implementation is appropriate for a **Testnet demonstration / early-stage prototype**. The following is the recommended sequencing to reach Mainnet production readiness, ordered by dependency rather than arbitrary priority:
+Ferry's current architecture — zero custody, bounded and typed anchor communication, pre-flight trustline verification, and per-route rate limiting — is a sound foundation for a Testnet deployment. The following steps remain before Mainnet go-live, ordered by dependency:
 
-1. **Close the Application-Level Gaps (§4)** — items 4.1–4.4 above are the direct prerequisites for handling real user sessions and real anchor traffic safely, and should land before any Mainnet anchor integration is attempted.
-2. **Introduce SEP-12 (KYC Customer Info API) support** — SEP-31 flows against real receiving anchors require registered customer records; Ferry currently surfaces the anchor's SEP-12-gated rejection transparently but does not implement the registration flow itself. This is the largest remaining protocol gap for a functioning direct-payment (SEP-31) path.
-3. **Anchor allowlisting & directory integration** — replace free-text/default anchor domain configuration with a vetted, operator-curated allowlist (or integration with the [Stellar Anchor Directory](https://resources.stellar.org/anchors)), consistent with the SSRF mitigation in §4.2.
-4. **Server-side session architecture** — implement the BFF/cookie session model from §4.1, including JWT refresh handling ahead of anchor-defined expiry.
-5. **Observability & audit logging** — structured logging of every orchestration call (challenge issuance, quote lock, transfer initiation) with correlation IDs, excluding any PII that may appear in anchor error payloads. Required both for incident response and for anchor-partner support escalations.
-6. **Security review & third-party audit** — a focused review of the SEP-10 challenge validation path (client + anchor trust boundary), the anchor-domain trust model, and dependency supply chain (`@stellar/stellar-sdk`, `@stellar/freighter-api`) prior to Mainnet passphrase cutover.
-7. **Network cutover** — swap `NEXT_PUBLIC_NETWORK_PASSPHRASE` / `NEXT_PUBLIC_HORIZON_URL` to Mainnet values behind a feature-flagged, explicitly reviewed configuration change (not a silent env default), with a rollback plan and a Testnet-parity regression pass immediately beforehand.
-8. **Load testing against rate limits (§4.2)** — validate the chosen throttling thresholds against realistic anchor-side rate limits before go-live, to avoid Ferry itself becoming the bottleneck or triggering anchor-side bans.
+1. **SEP-12 (KYC Customer Info API) integration.** SEP-31 direct payments against real receiving anchors require registered customer records. Ferry currently surfaces the anchor's SEP-12-gated rejection transparently but does not implement the registration flow itself — this is the largest remaining protocol gap for a functioning direct-payment path.
+2. **Anchor allowlisting.** Replace free-text/default anchor domain configuration with a vetted, operator-curated allowlist (or integration with the [Stellar Anchor Directory](https://resources.stellar.org/anchors)). Today, any client-supplied `domain` is resolved and called; an allowlist closes the residual open-relay/SSRF surface of Ferry's orchestration routes.
+3. **Distributed rate limiting.** Migrate `lib/rateLimit.ts` from its current in-memory, single-instance implementation to a shared store (Upstash Redis / Vercel Edge Config) before running more than one Ferry instance concurrently — the in-memory limiter's guarantees don't extend across processes.
+4. **Server-side session architecture.** Implement the BFF/cookie session model described in §4.4, including JWT refresh handling ahead of anchor-defined expiry.
+5. **Observability & audit logging.** Structured logging of every orchestration call (challenge issuance, quote lock, transfer initiation, rate-limit rejections) with correlation IDs, excluding any PII that may appear in anchor error payloads — required for both incident response and anchor-partner support escalations.
+6. **Security review & third-party audit.** A focused review of the SEP-10 challenge validation path (client + anchor trust boundary), the anchor-domain trust model, and the dependency supply chain (`@stellar/stellar-sdk`, `@stellar/freighter-api`) ahead of the Mainnet passphrase cutover.
+7. **Network cutover.** Swap `NEXT_PUBLIC_NETWORK_PASSPHRASE` / `NEXT_PUBLIC_HORIZON_URL` to Mainnet values behind an explicitly reviewed configuration change — not a silent environment default — with a rollback plan and a full Testnet-parity regression pass immediately beforehand.
+8. **Load testing.** Validate the rate-limit thresholds in §4.3 against realistic anchor-side limits before go-live, so Ferry itself doesn't become the bottleneck or trigger anchor-side bans under real traffic.
 
 ---
 
-*This document reflects the state of the `Ferry` codebase at the time of writing and should be revisited whenever a new SEP is integrated or the custody/session architecture changes.*
+*This document reflects the current state of the `Ferry` codebase and should be revisited whenever a new SEP is integrated or the custody/session architecture changes.*
