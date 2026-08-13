@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { signTransaction } from "@stellar/freighter-api";
+import { NotFoundError } from "@stellar/stellar-sdk";
 import {
   fetchSep24Transaction,
   startSep24Deposit,
@@ -10,12 +12,19 @@ import {
 } from "@/lib/stellar/client/sep24Client";
 import { createSep31Transaction, type Sep31TransactionResult } from "@/lib/stellar/client/sep31Client";
 import type { FirmQuote } from "@/lib/stellar/client/sep38Client";
+import { NETWORK_PASSPHRASE } from "@/lib/stellar/config";
+import { buildChangeTrustXdr, hasTrustline, submitSignedTransaction } from "@/lib/stellar/trustline";
+import { freighterErrorMessage } from "@/lib/stellar/freighterError";
 
 const SEP24_ASSETS = [
-  { code: "USDC", label: "USDC" },
-  { code: "native", label: "XLM" },
-  { code: "SRT", label: "SRT" },
+  { code: "USDC", label: "USDC", issuer: "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5" },
+  { code: "native", label: "XLM", issuer: null },
+  { code: "SRT", label: "SRT", issuer: "GCDNJUBQSX7AJWLJACMJ7I4BC3Z47BQUTMHEICZLE6MU4KQBRYG5JY6B" },
 ] as const;
+
+function issuerForAssetCode(code: string): string | null {
+  return SEP24_ASSETS.find((a) => a.code === code)?.issuer ?? null;
+}
 
 const POLL_INTERVAL_MS = 4000;
 const TERMINAL_STATUSES = new Set([
@@ -84,6 +93,8 @@ export default function TransferPanel({ anchorDomain, publicKey, token, lockedQu
   );
 }
 
+type TrustlineStatus = "unknown" | "checking" | "missing" | "present" | "error";
+
 function Sep24Panel({ anchorDomain, publicKey, token, lockedQuote }: TransferPanelProps) {
   const [direction, setDirection] = useState<"deposit" | "withdraw">("deposit");
   const [assetCode, setAssetCode] = useState<string>(
@@ -96,11 +107,80 @@ function Sep24Panel({ anchorDomain, publicKey, token, lockedQuote }: TransferPan
   const [error, setError] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  const [trustlineStatus, setTrustlineStatus] = useState<TrustlineStatus>("unknown");
+  const [trustlineError, setTrustlineError] = useState<string | null>(null);
+  const [establishingTrustline, setEstablishingTrustline] = useState(false);
+
+  const issuer = issuerForAssetCode(assetCode);
+  const trustlineRequired = direction === "deposit" && assetCode !== "native" && issuer !== null;
+
   useEffect(() => {
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
     };
   }, []);
+
+  // Pre-flight check (Gap 4.3): before a non-native deposit is even
+  // attempted, verify the destination account already trusts the asset —
+  // otherwise the anchor's hosted deposit would fail only after the user
+  // has completed KYC/funding there.
+  useEffect(() => {
+    if (!trustlineRequired || !issuer) {
+      // Nothing to reset here: every read of `trustlineStatus` below is
+      // itself gated on `trustlineRequired`, so a stale value from a
+      // previously-selected asset is simply ignored once it no longer
+      // applies — no need to synchronously clear it on every effect run.
+      return;
+    }
+    let cancelled = false;
+    // Deferred one microtask so the "checking" transition itself isn't a
+    // synchronous setState call inside the effect body (react-hooks'
+    // set-state-in-effect rule) — functionally instantaneous either way.
+    Promise.resolve().then(() => {
+      if (!cancelled) {
+        setTrustlineStatus("checking");
+        setTrustlineError(null);
+      }
+    });
+    (async () => {
+      const exists = await hasTrustline(publicKey, assetCode, issuer).catch((err) => {
+        if (!cancelled) {
+          setTrustlineStatus("error");
+          setTrustlineError(err instanceof Error ? err.message : "Failed to check trustline status");
+        }
+        return null;
+      });
+      if (!cancelled && exists !== null) {
+        setTrustlineStatus(exists ? "present" : "missing");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [trustlineRequired, issuer, assetCode, publicKey]);
+
+  async function establishTrustline() {
+    if (!issuer) return;
+    setEstablishingTrustline(true);
+    setTrustlineError(null);
+    try {
+      const xdr = await buildChangeTrustXdr(publicKey, assetCode, issuer);
+      const signed = await signTransaction(xdr, { networkPassphrase: NETWORK_PASSPHRASE, address: publicKey });
+      if (signed.error) {
+        throw new Error(freighterErrorMessage(signed.error, "Freighter declined to sign the trustline transaction"));
+      }
+      await submitSignedTransaction(signed.signedTxXdr);
+      setTrustlineStatus("present");
+    } catch (err) {
+      if (err instanceof NotFoundError) {
+        setTrustlineError("This account doesn't exist on Testnet yet. Fund it via Friendbot, then try again.");
+      } else {
+        setTrustlineError(err instanceof Error ? err.message : "Failed to establish trustline");
+      }
+    } finally {
+      setEstablishingTrustline(false);
+    }
+  }
 
   function startPolling(id: string) {
     if (pollRef.current) clearInterval(pollRef.current);
@@ -119,6 +199,10 @@ function Sep24Panel({ anchorDomain, publicKey, token, lockedQuote }: TransferPan
   }
 
   async function start() {
+    if (trustlineRequired && trustlineStatus !== "present") {
+      setError("This account needs a trustline for the selected asset before depositing — see below.");
+      return;
+    }
     setLoading(true);
     setError(null);
     setSession(null);
@@ -137,6 +221,8 @@ function Sep24Panel({ anchorDomain, publicKey, token, lockedQuote }: TransferPan
       setLoading(false);
     }
   }
+
+  const depositBlocked = trustlineRequired && trustlineStatus === "missing";
 
   return (
     <div className="mt-4 flex flex-col gap-4">
@@ -179,9 +265,37 @@ function Sep24Panel({ anchorDomain, publicKey, token, lockedQuote }: TransferPan
         </label>
       </div>
 
+      {trustlineRequired && trustlineStatus === "checking" && (
+        <p className="text-[11px] text-zinc-500">Checking whether this account trusts {assetCode}…</p>
+      )}
+
+      {depositBlocked && (
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
+          <p className="text-xs font-semibold text-amber-300">Trustline required</p>
+          <p className="mt-1 text-[11px] leading-relaxed text-amber-200/80">
+            This account has no trustline to {assetCode} yet, so the anchor&apos;s deposit would fail after you
+            already completed its hosted flow. Establish the trustline first — this only asks Freighter to sign a
+            <code className="mx-1 rounded bg-black/30 px-1 py-0.5 font-mono">ChangeTrust</code>
+            operation and does not move any funds.
+          </p>
+          <button
+            onClick={establishTrustline}
+            disabled={establishingTrustline}
+            className="mt-3 rounded-lg border border-amber-400/40 bg-amber-400/10 px-3 py-1.5 text-xs font-semibold text-amber-200 transition-colors hover:bg-amber-400/20 disabled:opacity-50"
+          >
+            {establishingTrustline ? "Waiting for Freighter signature…" : `Establish trustline for ${assetCode}`}
+          </button>
+        </div>
+      )}
+
+      {trustlineRequired && trustlineStatus === "error" && trustlineError && !depositBlocked && (
+        <p className="text-xs text-red-400">Trustline check failed: {trustlineError}</p>
+      )}
+      {trustlineError && depositBlocked && <p className="text-xs text-red-400">{trustlineError}</p>}
+
       <button
         onClick={start}
-        disabled={loading}
+        disabled={loading || depositBlocked || (trustlineRequired && trustlineStatus === "checking")}
         className="rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-black transition-colors hover:bg-zinc-200 disabled:opacity-50"
       >
         {loading ? "Opening anchor session…" : `Start Hosted ${direction === "deposit" ? "Deposit" : "Withdrawal"}`}
