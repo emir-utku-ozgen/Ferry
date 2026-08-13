@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { postFirmQuote } from "@/lib/stellar/sep38";
+import { toApiErrorResponse } from "@/lib/stellar/anchorError";
 
 /**
  * POST /api/sep38/quote
@@ -19,9 +20,7 @@ export async function POST(req: NextRequest) {
     const quote = await postFirmQuote(domain, token, payload);
     return NextResponse.json(quote);
   } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Unknown SEP-38 error" },
-      { status: 502 }
-    );
+    const { status, body } = toApiErrorResponse(err, "Unknown SEP-38 error");
+    return NextResponse.json(body, { status });
   }
 }

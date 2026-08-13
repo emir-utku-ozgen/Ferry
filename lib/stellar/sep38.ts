@@ -1,4 +1,6 @@
 import { resolveAnchorToml } from "./toml";
+import { anchorFetch, assertAnchorOk } from "./anchorFetch";
+import { AnchorError } from "./anchorError";
 
 /**
  * SEP-38: Anchor RFQ (quote) API.
@@ -41,7 +43,10 @@ export interface FirmQuoteResponse {
 async function quoteServer(domain: string): Promise<string> {
   const toml = await resolveAnchorToml(domain);
   if (!toml.anchorQuoteServer) {
-    throw new Error(`Anchor "${domain}" does not advertise an ANCHOR_QUOTE_SERVER (SEP-38 unsupported)`);
+    throw new AnchorError(
+      "ANCHOR_REJECTED",
+      `Anchor "${domain}" does not advertise an ANCHOR_QUOTE_SERVER (SEP-38 unsupported)`
+    );
   }
   return toml.anchorQuoteServer;
 }
@@ -56,10 +61,9 @@ export async function getIndicativePrice(
     if (value !== undefined) url.searchParams.set(key, value);
   });
 
-  const res = await fetch(url.toString());
-  if (!res.ok) {
-    throw new Error(`SEP-38 price request failed (${res.status}): ${await res.text()}`);
-  }
+  const context = `SEP-38 price request to "${domain}"`;
+  const res = await anchorFetch(url.toString(), {}, context);
+  await assertAnchorOk(res, context);
   return res.json();
 }
 
@@ -69,16 +73,19 @@ export async function postFirmQuote(
   payload: FirmQuoteRequest
 ): Promise<FirmQuoteResponse> {
   const base = await quoteServer(domain);
-  const res = await fetch(`${base}/quote`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
+  const context = `SEP-38 firm quote request to "${domain}"`;
+  const res = await anchorFetch(
+    `${base}/quote`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
     },
-    body: JSON.stringify(payload),
-  });
-  if (!res.ok) {
-    throw new Error(`SEP-38 firm quote request failed (${res.status}): ${await res.text()}`);
-  }
+    context
+  );
+  await assertAnchorOk(res, context);
   return res.json();
 }

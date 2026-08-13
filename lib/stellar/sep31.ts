@@ -1,4 +1,6 @@
 import { resolveAnchorToml } from "./toml";
+import { anchorFetch, assertAnchorOk } from "./anchorFetch";
+import { AnchorError } from "./anchorError";
 
 /**
  * SEP-31: Cross-Border Payments API.
@@ -33,19 +35,19 @@ export interface Sep31TransactionResponse {
 async function directPaymentServer(domain: string): Promise<string> {
   const toml = await resolveAnchorToml(domain);
   if (!toml.directPaymentServer) {
-    throw new Error(`Anchor "${domain}" does not advertise a DIRECT_PAYMENT_SERVER (SEP-31 unsupported)`);
+    throw new AnchorError(
+      "ANCHOR_REJECTED",
+      `Anchor "${domain}" does not advertise a DIRECT_PAYMENT_SERVER (SEP-31 unsupported)`
+    );
   }
   return toml.directPaymentServer;
 }
 
 export async function getSep31Info(domain: string, token: string): Promise<Sep31Info> {
   const base = await directPaymentServer(domain);
-  const res = await fetch(`${base}/info`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!res.ok) {
-    throw new Error(`SEP-31 info request failed (${res.status}): ${await res.text()}`);
-  }
+  const context = `SEP-31 info request to "${domain}"`;
+  const res = await anchorFetch(`${base}/info`, { headers: { Authorization: `Bearer ${token}` } }, context);
+  await assertAnchorOk(res, context);
   return res.json();
 }
 
@@ -55,17 +57,20 @@ export async function createSep31Transaction(
   payload: Sep31TransactionRequest
 ): Promise<Sep31TransactionResponse> {
   const base = await directPaymentServer(domain);
-  const res = await fetch(`${base}/transactions`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
+  const context = `SEP-31 transaction creation with "${domain}"`;
+  const res = await anchorFetch(
+    `${base}/transactions`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
     },
-    body: JSON.stringify(payload),
-  });
-  if (!res.ok) {
-    throw new Error(`SEP-31 transaction creation failed (${res.status}): ${await res.text()}`);
-  }
+    context
+  );
+  await assertAnchorOk(res, context);
   return res.json();
 }
 
@@ -75,11 +80,8 @@ export async function getSep31Transaction(
   id: string
 ): Promise<Record<string, unknown>> {
   const base = await directPaymentServer(domain);
-  const res = await fetch(`${base}/transactions/${id}`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!res.ok) {
-    throw new Error(`SEP-31 transaction lookup failed (${res.status}): ${await res.text()}`);
-  }
+  const context = `SEP-31 transaction lookup with "${domain}"`;
+  const res = await anchorFetch(`${base}/transactions/${id}`, { headers: { Authorization: `Bearer ${token}` } }, context);
+  await assertAnchorOk(res, context);
   return res.json();
 }

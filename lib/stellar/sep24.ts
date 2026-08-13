@@ -1,4 +1,6 @@
 import { resolveAnchorToml } from "./toml";
+import { anchorFetch, assertAnchorOk } from "./anchorFetch";
+import { AnchorError } from "./anchorError";
 
 /**
  * SEP-24: Hosted Deposit and Withdrawal.
@@ -25,7 +27,10 @@ export interface Sep24TransactionParams {
 async function transferServer(domain: string): Promise<string> {
   const toml = await resolveAnchorToml(domain);
   if (!toml.transferServerSep24) {
-    throw new Error(`Anchor "${domain}" does not advertise a TRANSFER_SERVER_SEP0024 (SEP-24 unsupported)`);
+    throw new AnchorError(
+      "ANCHOR_REJECTED",
+      `Anchor "${domain}" does not advertise a TRANSFER_SERVER_SEP0024 (SEP-24 unsupported)`
+    );
   }
   return toml.transferServerSep24;
 }
@@ -33,19 +38,22 @@ async function transferServer(domain: string): Promise<string> {
 async function postInteractive(
   endpoint: string,
   token: string,
-  params: Sep24TransactionParams
+  params: Sep24TransactionParams,
+  context: string
 ): Promise<InteractiveTransferResponse> {
-  const res = await fetch(endpoint, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
+  const res = await anchorFetch(
+    endpoint,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(params),
     },
-    body: JSON.stringify(params),
-  });
-  if (!res.ok) {
-    throw new Error(`SEP-24 interactive request failed (${res.status}): ${await res.text()}`);
-  }
+    context
+  );
+  await assertAnchorOk(res, context);
   return res.json();
 }
 
@@ -55,7 +63,12 @@ export async function initInteractiveDeposit(
   params: Sep24TransactionParams
 ): Promise<InteractiveTransferResponse> {
   const base = await transferServer(domain);
-  return postInteractive(`${base}/transactions/deposit/interactive`, token, params);
+  return postInteractive(
+    `${base}/transactions/deposit/interactive`,
+    token,
+    params,
+    `SEP-24 deposit request to "${domain}"`
+  );
 }
 
 export async function initInteractiveWithdrawal(
@@ -64,7 +77,12 @@ export async function initInteractiveWithdrawal(
   params: Sep24TransactionParams
 ): Promise<InteractiveTransferResponse> {
   const base = await transferServer(domain);
-  return postInteractive(`${base}/transactions/withdraw/interactive`, token, params);
+  return postInteractive(
+    `${base}/transactions/withdraw/interactive`,
+    token,
+    params,
+    `SEP-24 withdrawal request to "${domain}"`
+  );
 }
 
 export async function getTransactionStatus(
@@ -76,11 +94,8 @@ export async function getTransactionStatus(
   const url = new URL(`${base}/transaction`);
   url.searchParams.set("id", id);
 
-  const res = await fetch(url.toString(), {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!res.ok) {
-    throw new Error(`SEP-24 transaction status request failed (${res.status}): ${await res.text()}`);
-  }
+  const context = `SEP-24 transaction status request to "${domain}"`;
+  const res = await anchorFetch(url.toString(), { headers: { Authorization: `Bearer ${token}` } }, context);
+  await assertAnchorOk(res, context);
   return res.json();
 }

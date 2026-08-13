@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTransactionStatus } from "@/lib/stellar/sep24";
+import { toApiErrorResponse } from "@/lib/stellar/anchorError";
 
 /**
  * GET /api/sep24/transaction?domain=...&token=...&id=...
@@ -21,9 +22,7 @@ export async function GET(req: NextRequest) {
     const transaction = await getTransactionStatus(domain, token, id);
     return NextResponse.json(transaction);
   } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Unknown SEP-24 error" },
-      { status: 502 }
-    );
+    const { status, body } = toApiErrorResponse(err, "Unknown SEP-24 error");
+    return NextResponse.json(body, { status });
   }
 }

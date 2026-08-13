@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createSep31Transaction, getSep31Transaction } from "@/lib/stellar/sep31";
+import { toApiErrorResponse } from "@/lib/stellar/anchorError";
 
 /**
  * POST /api/sep31/transactions
@@ -18,10 +19,8 @@ export async function POST(req: NextRequest) {
     const transaction = await createSep31Transaction(domain, token, payload);
     return NextResponse.json(transaction);
   } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Unknown SEP-31 error" },
-      { status: 502 }
-    );
+    const { status, body } = toApiErrorResponse(err, "Unknown SEP-31 error");
+    return NextResponse.json(body, { status });
   }
 }
 
@@ -43,9 +42,7 @@ export async function GET(req: NextRequest) {
     const transaction = await getSep31Transaction(domain, token, id);
     return NextResponse.json(transaction);
   } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Unknown SEP-31 error" },
-      { status: 502 }
-    );
+    const { status, body } = toApiErrorResponse(err, "Unknown SEP-31 error");
+    return NextResponse.json(body, { status });
   }
 }

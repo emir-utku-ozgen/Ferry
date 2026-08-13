@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { initInteractiveWithdrawal } from "@/lib/stellar/sep24";
+import { toApiErrorResponse } from "@/lib/stellar/anchorError";
 
 /**
  * POST /api/sep24/withdraw
@@ -20,9 +21,7 @@ export async function POST(req: NextRequest) {
     const session = await initInteractiveWithdrawal(domain, token, { asset_code, account, amount });
     return NextResponse.json(session);
   } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Unknown SEP-24 error" },
-      { status: 502 }
-    );
+    const { status, body } = toApiErrorResponse(err, "Unknown SEP-24 error");
+    return NextResponse.json(body, { status });
   }
 }

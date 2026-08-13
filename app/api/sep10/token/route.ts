@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { submitSignedChallenge } from "@/lib/stellar/sep10";
+import { toApiErrorResponse } from "@/lib/stellar/anchorError";
 
 /**
  * POST /api/sep10/token
@@ -19,9 +20,7 @@ export async function POST(req: NextRequest) {
     const { token } = await submitSignedChallenge(domain, transaction);
     return NextResponse.json({ token });
   } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Unknown SEP-10 error" },
-      { status: 502 }
-    );
+    const { status, body } = toApiErrorResponse(err, "Unknown SEP-10 error");
+    return NextResponse.json(body, { status });
   }
 }

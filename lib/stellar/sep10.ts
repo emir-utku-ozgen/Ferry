@@ -1,4 +1,6 @@
 import { resolveAnchorToml } from "./toml";
+import { anchorFetch, assertAnchorOk } from "./anchorFetch";
+import { AnchorError } from "./anchorError";
 
 /**
  * SEP-10: Stellar Web Authentication.
@@ -29,17 +31,19 @@ export async function requestChallenge(
 ): Promise<Sep10ChallengeResponse> {
   const toml = await resolveAnchorToml(domain);
   if (!toml.webAuthEndpoint) {
-    throw new Error(`Anchor "${domain}" does not advertise a WEB_AUTH_ENDPOINT (SEP-10 unsupported)`);
+    throw new AnchorError(
+      "ANCHOR_REJECTED",
+      `Anchor "${domain}" does not advertise a WEB_AUTH_ENDPOINT (SEP-10 unsupported)`
+    );
   }
 
   const url = new URL(toml.webAuthEndpoint);
   url.searchParams.set("account", account);
   if (homeDomain) url.searchParams.set("home_domain", homeDomain);
 
-  const res = await fetch(url.toString(), { method: "GET" });
-  if (!res.ok) {
-    throw new Error(`SEP-10 challenge request failed (${res.status}): ${await safeText(res)}`);
-  }
+  const context = `SEP-10 challenge request to "${domain}"`;
+  const res = await anchorFetch(url.toString(), { method: "GET" }, context);
+  await assertAnchorOk(res, context);
   return res.json();
 }
 
@@ -49,24 +53,22 @@ export async function submitSignedChallenge(
 ): Promise<Sep10TokenResponse> {
   const toml = await resolveAnchorToml(domain);
   if (!toml.webAuthEndpoint) {
-    throw new Error(`Anchor "${domain}" does not advertise a WEB_AUTH_ENDPOINT (SEP-10 unsupported)`);
+    throw new AnchorError(
+      "ANCHOR_REJECTED",
+      `Anchor "${domain}" does not advertise a WEB_AUTH_ENDPOINT (SEP-10 unsupported)`
+    );
   }
 
-  const res = await fetch(toml.webAuthEndpoint, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ transaction: signedTransactionXdr }),
-  });
-  if (!res.ok) {
-    throw new Error(`SEP-10 token exchange failed (${res.status}): ${await safeText(res)}`);
-  }
+  const context = `SEP-10 token exchange with "${domain}"`;
+  const res = await anchorFetch(
+    toml.webAuthEndpoint,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ transaction: signedTransactionXdr }),
+    },
+    context
+  );
+  await assertAnchorOk(res, context);
   return res.json();
-}
-
-async function safeText(res: Response): Promise<string> {
-  try {
-    return await res.text();
-  } catch {
-    return "<no body>";
-  }
 }
