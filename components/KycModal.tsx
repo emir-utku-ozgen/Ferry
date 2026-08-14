@@ -7,11 +7,13 @@ import {
   type Sep12CustomerInfo,
   type Sep12Status,
 } from "@/lib/stellar/client/sep12Client";
+import { validateIban } from "@/lib/iban";
 
 interface KycModalProps {
   anchorDomain: string;
   publicKey: string;
   token: string;
+  transferId?: string;
   onClose: () => void;
   onStatusChange: (status: Sep12Status) => void;
 }
@@ -20,6 +22,7 @@ interface KycModalProps {
 // (relevant to a EUR → TRY payout corridor): recipient banking fields.
 const REQUIRED_FIELD_ORDER = ["first_name", "last_name", "email_address"];
 const BANK_FIELD_ORDER = ["bank_name", "bank_account_number", "bank_account_type", "bank_number"];
+const IBAN_FIELD_NAME = "bank_account_number";
 
 /**
  * SEP-12 Customer Info step. Ferry never stores what's entered here — every
@@ -27,7 +30,7 @@ const BANK_FIELD_ORDER = ["bank_name", "bank_account_number", "bank_account_type
  * (`/api/sep12/customer`), the same non-custodial handoff pattern as the
  * SEP-24 hosted UI.
  */
-export default function KycModal({ anchorDomain, publicKey, token, onClose, onStatusChange }: KycModalProps) {
+export default function KycModal({ anchorDomain, publicKey, token, transferId, onClose, onStatusChange }: KycModalProps) {
   const [customer, setCustomer] = useState<Sep12CustomerInfo | null>(null);
   const [values, setValues] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
@@ -51,11 +54,19 @@ export default function KycModal({ anchorDomain, publicKey, token, onClose, onSt
     };
   }, [anchorDomain, token, publicKey]);
 
+  const ibanValue = values[IBAN_FIELD_NAME];
+  const ibanResult = ibanValue ? validateIban(ibanValue) : null;
+
   async function submit() {
+    if (ibanValue && ibanResult && !ibanResult.valid) {
+      setError(`IBAN: ${ibanResult.reason}`);
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
-      await submitCustomerInfo(anchorDomain, token, values);
+      const submission = ibanResult?.valid ? { ...values, [IBAN_FIELD_NAME]: ibanResult.normalized } : values;
+      await submitCustomerInfo(anchorDomain, token, submission, { transferId });
       const refreshed = await fetchCustomerInfo(anchorDomain, token, publicKey);
       setCustomer(refreshed);
       onStatusChange(refreshed.status);
@@ -114,7 +125,20 @@ export default function KycModal({ anchorDomain, publicKey, token, onClose, onSt
                   <div className="flex flex-col gap-3 border-t border-white/10 pt-4">
                     <p className="text-xs font-semibold text-zinc-400">Bank / IBAN details (recipient payout)</p>
                     {bankFields.map((key) => (
-                      <FieldInput key={key} name={key} field={fields[key]} value={values[key] ?? ""} onChange={setValues} />
+                      <FieldInput
+                        key={key}
+                        name={key}
+                        field={fields[key]}
+                        value={values[key] ?? ""}
+                        onChange={setValues}
+                        validation={
+                          key === IBAN_FIELD_NAME && values[key]
+                            ? validateIban(values[key]).valid
+                              ? { ok: true, message: "Valid IBAN format." }
+                              : { ok: false, message: validateIban(values[key]).reason ?? "Invalid IBAN." }
+                            : undefined
+                        }
+                      />
                     ))}
                   </div>
                 )}
@@ -144,11 +168,13 @@ function FieldInput({
   field,
   value,
   onChange,
+  validation,
 }: {
   name: string;
   field: { description: string; optional?: boolean; choices?: string[] };
   value: string;
   onChange: (updater: (prev: Record<string, string>) => Record<string, string>) => void;
+  validation?: { ok: boolean; message: string };
 }) {
   const label = name
     .split("_")
@@ -182,6 +208,11 @@ function FieldInput({
           onChange={(e) => onChange((prev) => ({ ...prev, [name]: e.target.value }))}
           className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-white/30"
         />
+      )}
+      {validation && (
+        <span className={`mt-1 block text-[11px] ${validation.ok ? "text-emerald-400" : "text-red-400"}`}>
+          {validation.message}
+        </span>
       )}
     </label>
   );

@@ -22,9 +22,10 @@ export interface Sep12CustomerInfo {
 export async function fetchCustomerInfo(
   domain: string,
   token: string,
-  account: string
+  account: string,
+  type?: string
 ): Promise<Sep12CustomerInfo> {
-  const query = new URLSearchParams({ domain, token, account });
+  const query = new URLSearchParams({ domain, token, account, ...(type ? { type } : {}) });
   const res = await fetch(`/api/sep12/customer?${query.toString()}`);
   return parseJsonOrThrow<Sep12CustomerInfo>(res);
 }
@@ -32,12 +33,16 @@ export async function fetchCustomerInfo(
 export async function submitCustomerInfo(
   domain: string,
   token: string,
-  fields: Record<string, string>
+  fields: Record<string, string>,
+  options: { idempotencyKey?: string; transferId?: string } = {}
 ): Promise<{ id: string }> {
   const res = await fetch("/api/sep12/customer", {
     method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ domain, token, fields }),
+    headers: {
+      "Content-Type": "application/json",
+      ...(options.idempotencyKey ? { "Idempotency-Key": options.idempotencyKey } : {}),
+    },
+    body: JSON.stringify({ domain, token, fields, transferId: options.transferId }),
   });
   return parseJsonOrThrow<{ id: string }>(res);
 }

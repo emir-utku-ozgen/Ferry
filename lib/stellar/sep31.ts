@@ -46,7 +46,7 @@ async function directPaymentServer(domain: string): Promise<string> {
 export async function getSep31Info(domain: string, token: string): Promise<Sep31Info> {
   const base = await directPaymentServer(domain);
   const context = `SEP-31 info request to "${domain}"`;
-  const res = await anchorFetch(`${base}/info`, { headers: { Authorization: `Bearer ${token}` } }, context);
+  const res = await anchorFetch(`${base}/info`, { headers: { Authorization: `Bearer ${token}` } }, context, { retries: 2 });
   await assertAnchorOk(res, context);
   return res.json();
 }
@@ -81,7 +81,9 @@ export async function getSep31Transaction(
 ): Promise<Record<string, unknown>> {
   const base = await directPaymentServer(domain);
   const context = `SEP-31 transaction lookup with "${domain}"`;
-  const res = await anchorFetch(`${base}/transactions/${id}`, { headers: { Authorization: `Bearer ${token}` } }, context);
+  const res = await anchorFetch(`${base}/transactions/${id}`, { headers: { Authorization: `Bearer ${token}` } }, context, {
+    retries: 2,
+  });
   await assertAnchorOk(res, context);
   return res.json();
 }

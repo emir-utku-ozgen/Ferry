@@ -95,7 +95,7 @@ export async function getTransactionStatus(
   url.searchParams.set("id", id);
 
   const context = `SEP-24 transaction status request to "${domain}"`;
-  const res = await anchorFetch(url.toString(), { headers: { Authorization: `Bearer ${token}` } }, context);
+  const res = await anchorFetch(url.toString(), { headers: { Authorization: `Bearer ${token}` } }, context, { retries: 2 });
   await assertAnchorOk(res, context);
   return res.json();
 }

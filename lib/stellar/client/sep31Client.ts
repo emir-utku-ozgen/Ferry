@@ -19,11 +19,15 @@ export async function createSep31Transaction(
     quote_id?: string;
     funding_method?: string;
     fields?: Record<string, unknown>;
-  }
+  },
+  options: { idempotencyKey?: string } = {}
 ): Promise<Sep31TransactionResult> {
   const res = await fetch("/api/sep31/transactions", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...(options.idempotencyKey ? { "Idempotency-Key": options.idempotencyKey } : {}),
+    },
     body: JSON.stringify({ domain, token, ...params }),
   });
   return parseJsonOrThrow<Sep31TransactionResult>(res);

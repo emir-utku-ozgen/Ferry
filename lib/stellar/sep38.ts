@@ -70,7 +70,7 @@ export async function getIndicativePrice(
   });
 
   const context = `SEP-38 price request to "${domain}"`;
-  const res = await anchorFetch(url.toString(), {}, context);
+  const res = await anchorFetch(url.toString(), {}, context, { retries: 2 });
   await assertAnchorOk(res, context);
   return res.json();
 }

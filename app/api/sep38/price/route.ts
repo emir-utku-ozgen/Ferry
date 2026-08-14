@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getIndicativePrice } from "@/lib/stellar/sep38";
 import { toApiErrorResponse } from "@/lib/stellar/anchorError";
 import { checkRateLimit, rateLimitResponse } from "@/lib/rateLimit";
+import { logger } from "@/lib/logger";
 
 /**
  * GET /api/sep38/price?domain=...&sell_asset=...&buy_asset=...&sell_amount=...&context=sep24
@@ -39,6 +40,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(price);
   } catch (err) {
     const { status, body } = toApiErrorResponse(err, "Unknown SEP-38 error");
+    logger.error({ route: "sep38-price", event: "sep38.price.failed", status, code: body.code });
     return NextResponse.json(body, { status });
   }
 }

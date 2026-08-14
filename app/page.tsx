@@ -122,11 +122,13 @@ export default function Home() {
 
         {publicKey && sep10Token && (
           <StatusTracker
+            transferId={lockedQuote?.id}
             hasQuote={Boolean(lockedQuote)}
             quoteExpired={quoteExpired}
             kycStatus={kycStatus}
             transferStatus={transferStatus}
             error={flowError}
+            onDismissError={() => setFlowError(null)}
           />
         )}
 
@@ -149,6 +151,7 @@ export default function Home() {
           anchorDomain={ANCHOR_DOMAIN}
           publicKey={publicKey}
           token={sep10Token}
+          transferId={lockedQuote?.id}
           onClose={() => setKycModalOpen(false)}
           onStatusChange={setKycStatus}
         />

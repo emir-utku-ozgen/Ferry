@@ -1,5 +1,8 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { fetchAuditTrail, type AuditEvent } from "@/lib/auditClient";
+
 export type FlowErrorType = "quote_expired" | "anchor_rejected" | "invalid_recipient_details" | "kyc_rejected";
 
 export interface FlowError {
@@ -10,11 +13,13 @@ export interface FlowError {
 export type KycStatus = "not_started" | "PROCESSING" | "NEEDS_INFO" | "ACCEPTED" | "REJECTED";
 
 interface StatusTrackerProps {
+  transferId?: string;
   hasQuote: boolean;
   quoteExpired: boolean;
   kycStatus: KycStatus;
   transferStatus: string | null;
   error: FlowError | null;
+  onDismissError?: () => void;
 }
 
 const STEPS = [
@@ -64,11 +69,46 @@ function currentStepIndex(hasQuote: boolean, kycStatus: KycStatus, transferStatu
 /**
  * End-to-end transfer lifecycle tracker (distinct from RemittanceFlow's
  * wallet/auth steps above it): Quote Locked → KYC Verified → Deposit
- * Initiated → Settled in Lira, plus a dedicated error screen for the
- * failure modes that can interrupt that path.
+ * Initiated → Settled in Lira, plus a dedicated error screen — with a
+ * dismiss action for clean recovery rather than a dead end — for the
+ * failure modes that can interrupt that path, and a live audit trail
+ * (GAP_ANALYSIS.md §3: "no audit trail can be reconstructed") pulled from
+ * GET /api/audit/[transferId].
  */
-export default function StatusTracker({ hasQuote, quoteExpired, kycStatus, transferStatus, error }: StatusTrackerProps) {
+export default function StatusTracker({
+  transferId,
+  hasQuote,
+  quoteExpired,
+  kycStatus,
+  transferStatus,
+  error,
+  onDismissError,
+}: StatusTrackerProps) {
   const currentIndex = currentStepIndex(hasQuote, kycStatus, transferStatus);
+  const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
+
+  useEffect(() => {
+    // Render below is gated on `transferId &&`, so a stale `auditEvents`
+    // value from a previous transfer is simply never shown once
+    // `transferId` clears — no need to synchronously reset it here.
+    if (!transferId) return;
+    let cancelled = false;
+    const poll = () => {
+      fetchAuditTrail(transferId)
+        .then((events) => {
+          if (!cancelled) setAuditEvents(events);
+        })
+        .catch(() => {
+          /* audit trail is a convenience view, not load-bearing — ignore transient failures */
+        });
+    };
+    poll();
+    const interval = setInterval(poll, 5000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [transferId]);
 
   return (
     <div className="w-full rounded-2xl border border-white/10 bg-white/[0.03] p-6">
@@ -112,6 +152,31 @@ export default function StatusTracker({ hasQuote, quoteExpired, kycStatus, trans
           <p className="text-sm font-semibold text-red-300">{ERROR_COPY[error.type].title}</p>
           <p className="mt-1 text-[11px] leading-relaxed text-red-200/80">{ERROR_COPY[error.type].hint}</p>
           <p className="mt-2 rounded bg-black/30 p-2 font-mono text-[11px] text-red-300/90">{error.message}</p>
+          {onDismissError && (
+            <button
+              onClick={onDismissError}
+              className="mt-3 rounded-lg border border-red-400/40 bg-red-400/10 px-3 py-1.5 text-xs font-semibold text-red-200 transition-colors hover:bg-red-400/20"
+            >
+              Dismiss and try again
+            </button>
+          )}
+        </div>
+      )}
+
+      {transferId && auditEvents.length > 0 && (
+        <div className="mt-4 border-t border-white/10 pt-4">
+          <p className="text-xs font-semibold text-zinc-400">Audit trail · {transferId}</p>
+          <ol className="mt-2 flex flex-col gap-1.5">
+            {auditEvents.map((e, i) => (
+              <li key={i} className="flex items-baseline gap-2 text-[11px] text-zinc-500">
+                <span className="font-mono text-zinc-600">{new Date(e.timestamp).toLocaleTimeString()}</span>
+                <span className="text-zinc-300">{e.event}</span>
+                {e.status && <span className="text-zinc-600">status={e.status}</span>}
+                {e.code && <span className="text-amber-500/80">code={e.code}</span>}
+                {e.detail && <span className="text-zinc-600">{e.detail}</span>}
+              </li>
+            ))}
+          </ol>
         </div>
       )}
     </div>

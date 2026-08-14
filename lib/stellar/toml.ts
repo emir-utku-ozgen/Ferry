@@ -32,7 +32,10 @@ export async function resolveAnchorToml(domain: string): Promise<AnchorToml> {
   const cached = tomlCache.get(domain);
   if (cached) return cached;
 
-  const promise = StellarToml.Resolver.resolve(domain, { timeout: ANCHOR_TIMEOUT_MS })
+  // TOML resolution is a plain GET, so it's safe to retry on connectivity
+  // failures — same reasoning as anchorFetch's `retries` option, which the
+  // SDK's own resolver doesn't expose, hence the manual loop here.
+  const promise = resolveWithRetry(domain, 2)
     .then((raw) => ({
       signingKey: raw.SIGNING_KEY,
       webAuthEndpoint: raw.WEB_AUTH_ENDPOINT,
@@ -50,4 +53,16 @@ export async function resolveAnchorToml(domain: string): Promise<AnchorToml> {
   // Don't cache failures — let the caller retry on the next request.
   promise.catch(() => tomlCache.delete(domain));
   return promise;
+}
+
+async function resolveWithRetry(domain: string, maxRetries: number): Promise<StellarToml.Api.StellarToml> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await StellarToml.Resolver.resolve(domain, { timeout: ANCHOR_TIMEOUT_MS });
+    } catch (err) {
+      if (attempt >= maxRetries) throw err;
+      const backoffMs = Math.min(250 * 2 ** attempt + Math.random() * 100, 4_000);
+      await new Promise((resolve) => setTimeout(resolve, backoffMs));
+    }
+  }
 }

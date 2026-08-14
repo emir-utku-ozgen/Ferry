@@ -56,7 +56,7 @@ export async function getCustomerInfo(
   });
 
   const context = `SEP-12 customer lookup at "${domain}"`;
-  const res = await anchorFetch(url.toString(), { headers: { Authorization: `Bearer ${token}` } }, context);
+  const res = await anchorFetch(url.toString(), { headers: { Authorization: `Bearer ${token}` } }, context, { retries: 2 });
   await assertAnchorOk(res, context);
   return res.json();
 }

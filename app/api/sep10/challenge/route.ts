@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requestChallenge } from "@/lib/stellar/sep10";
 import { toApiErrorResponse } from "@/lib/stellar/anchorError";
 import { checkRateLimit, rateLimitResponse } from "@/lib/rateLimit";
+import { logger } from "@/lib/logger";
 
 /**
  * POST /api/sep10/challenge
@@ -27,9 +28,11 @@ export async function POST(req: NextRequest) {
     }
 
     const challenge = await requestChallenge(domain, account, homeDomain || undefined);
+    logger.info({ route: "sep10-challenge", event: "sep10.challenge.issued", status: 200 });
     return NextResponse.json(challenge);
   } catch (err) {
     const { status, body } = toApiErrorResponse(err, "Unknown SEP-10 error");
+    logger.error({ route: "sep10-challenge", event: "sep10.challenge.failed", status, code: body.code });
     return NextResponse.json(body, { status });
   }
 }
