@@ -23,8 +23,21 @@ All runtime configuration is environment variables, read in `lib/stellar/config.
 | `NEXT_PUBLIC_ANCHOR_DOMAIN` | `lib/stellar/config.ts` | Default anchor domain the UI resolves SEP-1 `stellar.toml` against | `testanchor.stellar.org` | the contracted production anchor's domain (**not yet known** — see `CORRIDOR_VERIFICATION.md`) |
 | `ANCHOR_ALLOWLIST` | `lib/stellar/anchorAllowlist.ts` | Comma-separated domains the server will resolve/proxy at all — every other domain is rejected before any outbound call (SSRF guard) | unset (defaults to `testanchor.stellar.org`) | must be set explicitly to only the contracted anchor domain(s) |
 | `NEXT_PUBLIC_APP_URL` | `lib/stellar/config.ts` | Base URL used for server-side API route construction | `http://localhost:3000` | the real production URL |
+| `NEXT_PUBLIC_EURC_ISSUER` | `lib/stellar/config.ts` | Overrides the EURC issuer used to build the `stellar:EURC:<issuer>` asset identifier | unset (defaults to Circle's real, verified Testnet issuer — `CORRIDOR_VERIFICATION.md` §5.1) | not applicable — EURC's Mainnet issuer is a separate, real address; do not reuse the Testnet default |
+| `NEXT_PUBLIC_MOCK_TRY_ISSUER` | `lib/stellar/config.ts` | Overrides the mock TRY issuer used to build the `stellar:TRY:<issuer>` asset identifier | unset (defaults to the mock anchor's generated issuer — see below) | not applicable — there is no Mainnet mock anchor; TRY must come from a real contracted anchor by then |
 
 `.env.local.example` at the repo root documents the Testnet defaults; there is currently no `.env.production.example` — creating one as part of the Mainnet cutover is item 1 in `GO_LIVE_CHECKLIST.md`.
+
+### 2.0 The EURC → TRY corridor specifically: real EURC, mock TRY
+
+`NEXT_PUBLIC_ANCHOR_DOMAIN` is the single anchor Ferry's UI targets for *every* pairing it currently offers — there's no per-corridor anchor routing. To run the EUR(EURC)→TRY pairing (as opposed to the USD/CAD pairs `testanchor.stellar.org` already supports), point Ferry at the mock anchor committed in `mock-anchor/`:
+
+```
+NEXT_PUBLIC_ANCHOR_DOMAIN=localhost:4001
+ANCHOR_ALLOWLIST=localhost:4001
+```
+
+Full detail — what the mock anchor does and doesn't implement, why it exists instead of the real Stellar Anchor Platform, and the "TRY payout is a demo artifact, not a real payout" caveat — is in `mock-anchor/README.md` and `CORRIDOR_VERIFICATION.md` §5. One related code change worth knowing about: `lib/stellar/toml.ts` allows plain-HTTP `stellar.toml` resolution, but *only* for `localhost`/`127.0.0.1` domains (the mock anchor has no TLS certificate) — every other domain still requires HTTPS exactly as before.
 
 ### 2.1 Testnet → Mainnet switching procedure
 

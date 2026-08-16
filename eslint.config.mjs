@@ -12,6 +12,10 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // mock-anchor/ is a deliberately separate, plain CommonJS Node tool
+    // (see mock-anchor/README.md) — not part of the Next.js/TypeScript
+    // app, so it isn't held to this config's TS-oriented rules.
+    "mock-anchor/**",
   ]),
 ]);
 

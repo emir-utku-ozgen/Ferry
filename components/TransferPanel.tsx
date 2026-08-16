@@ -17,8 +17,17 @@ import { buildChangeTrustXdr, describeLowReserveError, hasTrustline, submitSigne
 import { freighterErrorMessage } from "@/lib/stellar/freighterError";
 import { ApiError } from "@/lib/stellar/client/http";
 import type { FlowError, KycStatus } from "@/components/StatusTracker";
+import { EURC_ISSUER } from "@/lib/stellar/config";
 
+// EURC listed first — it's the actual settlement asset for the EUR(EURC)
+// -> TRY corridor's SEP-31 leg (see mock-anchor/), which now defaults
+// this dropdown. It's also selectable for SEP-24, though neither
+// testanchor.stellar.org nor the mock anchor (which implements SEP-31
+// only, not SEP-24) support a EURC deposit/withdraw session — selecting
+// it there surfaces the same honest anchor-rejection pattern as any
+// other unsupported pairing in this app.
 const SEP24_ASSETS = [
+  { code: "EURC", label: "EURC", issuer: EURC_ISSUER },
   { code: "USDC", label: "USDC", issuer: "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5" },
   { code: "native", label: "XLM", issuer: null },
   { code: "SRT", label: "SRT", issuer: "GCDNJUBQSX7AJWLJACMJ7I4BC3Z47BQUTMHEICZLE6MU4KQBRYG5JY6B" },

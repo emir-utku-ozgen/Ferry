@@ -1,0 +1,17 @@
+{
+  "name": "ferry-mock-anchor",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Minimal mock SEP-1/10/12/38/31 anchor for Ferry's local EURC -> TRY corridor test. Not a production anchor implementation — see README.md.",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@stellar/stellar-sdk": "^15.1.0",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.2"
+  }
+}

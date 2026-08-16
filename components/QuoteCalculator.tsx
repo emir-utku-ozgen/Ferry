@@ -3,22 +3,31 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { fetchFirmQuote, fetchIndicativePrice, type FirmQuote, type Sep38Fee } from "@/lib/stellar/client/sep38Client";
 import { ApiError } from "@/lib/stellar/client/http";
+import { EURC_ISSUER, MOCK_TRY_ISSUER } from "@/lib/stellar/config";
 
 // EUR → TRY is Ferry's showcased corridor (sender pays EUR, recipient is
-// paid out in Turkish Lira — both fiat, both via licensed Anchors). It's
-// pre-selected below. The USD/CAD → USDC/XLM/SRT pairs remain available
-// because they're the ones the default Testnet anchor (testanchor.stellar.org)
-// actually has configured in its SEP-38 /info — EUR/TRY will surface a real,
-// honest anchor rejection against that anchor until a corridor-specific
-// anchor is configured via NEXT_PUBLIC_ANCHOR_DOMAIN.
+// paid out in Turkish Lira). The EUR leg is represented by Circle's real
+// EURC — a Stellar-native asset, not a raw `iso4217:EUR` fiat code, since
+// that's what a sender actually holds and sends on-chain (verified issuer:
+// CORRIDOR_VERIFICATION.md §5). The TRY leg has no public Testnet anchor
+// to point at, so it's represented by Ferry's own mock anchor
+// (`mock-anchor/`) — a real Stellar asset, but explicitly NOT a real
+// fiat-backed one; see CORRIDOR_VERIFICATION.md §5 and
+// mock-anchor/README.md before treating this pairing as anything more
+// than a local test harness. Both are only *quotable* when
+// `NEXT_PUBLIC_ANCHOR_DOMAIN` actually points at an anchor that supports
+// them — the mock anchor for EURC/TRY, same as any other pairing here.
+// The USD/CAD → USDC/XLM/SRT pairs remain available because they're what
+// the default Testnet anchor (testanchor.stellar.org) has configured in
+// its own SEP-38 /info.
 const SELL_ASSETS = [
-  { value: "iso4217:EUR", label: "EUR" },
+  { value: `stellar:EURC:${EURC_ISSUER}`, label: "EUR (EURC)" },
   { value: "iso4217:USD", label: "USD" },
   { value: "iso4217:CAD", label: "CAD" },
 ] as const;
 
 const BUY_ASSETS = [
-  { value: "iso4217:TRY", label: "TRY" },
+  { value: `stellar:TRY:${MOCK_TRY_ISSUER}`, label: "TRY (Mock Anchor)" },
   { value: "stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5", label: "USDC" },
   { value: "stellar:native", label: "XLM" },
   { value: "stellar:SRT:GCDNJUBQSX7AJWLJACMJ7I4BC3Z47BQUTMHEICZLE6MU4KQBRYG5JY6B", label: "SRT" },

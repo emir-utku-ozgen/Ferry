@@ -55,10 +55,25 @@ export async function resolveAnchorToml(domain: string): Promise<AnchorToml> {
   return promise;
 }
 
+// Plain-HTTP resolution is refused by default (`allowHttp: false` is the
+// SDK's own safe default, and stays that way for every real domain). The
+// one narrow exception is a `localhost`/`127.0.0.1` anchor domain — the
+// only way to reach `mock-anchor/` (see its README), which has no TLS
+// certificate of its own. This never weakens anything for a real anchor:
+// a production domain never matches this check, so it's still refused
+// over plain HTTP exactly as before.
+function isLocalAnchorDomain(domain: string): boolean {
+  const host = domain.split(":")[0].toLowerCase();
+  return host === "localhost" || host === "127.0.0.1";
+}
+
 async function resolveWithRetry(domain: string, maxRetries: number): Promise<StellarToml.Api.StellarToml> {
   for (let attempt = 0; ; attempt++) {
     try {
-      return await StellarToml.Resolver.resolve(domain, { timeout: ANCHOR_TIMEOUT_MS });
+      return await StellarToml.Resolver.resolve(domain, {
+        timeout: ANCHOR_TIMEOUT_MS,
+        allowHttp: isLocalAnchorDomain(domain),
+      });
     } catch (err) {
       if (attempt >= maxRetries) throw err;
       const backoffMs = Math.min(250 * 2 ** attempt + Math.random() * 100, 4_000);
