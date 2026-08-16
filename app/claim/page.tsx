@@ -1,4 +1,4 @@
-export default function RecipientLandingPage() {
+export default function ClaimLandingPage() {
   return (
     <div className="flex flex-1 flex-col items-center justify-center bg-black px-8 py-16 text-center">
       <span className="text-lg font-semibold tracking-tight text-white">Ferry</span>

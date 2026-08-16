@@ -395,7 +395,7 @@ function Sep31Panel({ anchorDomain, publicKey, token, lockedQuote, kycStatus, on
 
   function recipientLink(): string | null {
     if (!lockedQuote || typeof window === "undefined") return null;
-    const url = new URL(`/recipient/${lockedQuote.id}`, window.location.origin);
+    const url = new URL(`/claim/${lockedQuote.id}`, window.location.origin);
     url.searchParams.set("domain", anchorDomain);
     url.searchParams.set("token", token);
     url.searchParams.set("account", publicKey);

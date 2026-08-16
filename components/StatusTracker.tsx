@@ -25,8 +25,8 @@ interface StatusTrackerProps {
 const STEPS = [
   { key: "quote", label: "Quote Locked" },
   { key: "kyc", label: "KYC Verified" },
-  { key: "deposit", label: "Deposit Initiated" },
-  { key: "settled", label: "Settled in Lira" },
+  { key: "settling", label: "Settling (Stellar Testnet)" },
+  { key: "delivered", label: "Completed / Delivered" },
 ] as const;
 
 const SETTLED_STATUSES = new Set(["completed"]);
@@ -68,12 +68,12 @@ function currentStepIndex(hasQuote: boolean, kycStatus: KycStatus, transferStatu
 
 /**
  * End-to-end transfer lifecycle tracker (distinct from RemittanceFlow's
- * wallet/auth steps above it): Quote Locked → KYC Verified → Deposit
- * Initiated → Settled in Lira, plus a dedicated error screen — with a
- * dismiss action for clean recovery rather than a dead end — for the
- * failure modes that can interrupt that path, and a live audit trail
- * (GAP_ANALYSIS.md §3: "no audit trail can be reconstructed") pulled from
- * GET /api/audit/[transferId].
+ * wallet/auth steps above it): Quote Locked → KYC Verified → Settling
+ * (Stellar Testnet) → Completed / Delivered, plus a dedicated error
+ * screen — with a dismiss action for clean recovery rather than a dead
+ * end — for the failure modes that can interrupt that path, and a live
+ * audit trail (GAP_ANALYSIS.md §3: "no audit trail can be reconstructed")
+ * pulled from GET /api/audit/[transferId].
  */
 export default function StatusTracker({
   transferId,

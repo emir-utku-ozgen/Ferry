@@ -8,13 +8,13 @@ import { validateIban } from "@/lib/iban";
 const RECEIVER_TYPE = "sep31-receiver";
 
 /**
- * The recipient-facing link (GAP_ANALYSIS.md §4: "no recipient-specific
- * route... exists"). A sender shares a URL to this page after locking a
- * quote; the recipient — with no Stellar wallet and no prior relationship
- * with Ferry — enters their own name and IBAN here and it's relayed
- * straight to the anchor's SEP-12 KYC_SERVER, the same non-custodial
- * passthrough pattern as everywhere else in this codebase. Ferry stores
- * none of it; there is no database in this project to store it in.
+ * The recipient claim link (SOW Deliverable 3). A sender shares a URL to
+ * this page after locking a quote; the recipient — with no Stellar wallet
+ * and no prior relationship with Ferry — enters their own name and IBAN
+ * here and it's relayed straight to the anchor's SEP-12 KYC_SERVER, the
+ * same non-custodial passthrough pattern as everywhere else in this
+ * codebase. Ferry stores none of it; there is no database in this project
+ * to store it in.
  *
  * Known simplification, stated rather than hidden: this page authenticates
  * its SEP-12 PUT/GET calls using the *sender's* SEP-10 token, embedded in
@@ -23,8 +23,8 @@ const RECEIVER_TYPE = "sep31-receiver";
  * instead of passing the sender's own session token through a URL — that
  * requires a backend session store this Testnet prototype doesn't have.
  */
-export default function RecipientPage() {
-  const params = useParams<{ transferId: string }>();
+export default function ClaimPage() {
+  const params = useParams<{ id: string }>();
   const searchParams = useSearchParams();
 
   const domain = searchParams.get("domain");
@@ -92,7 +92,7 @@ export default function RecipientPage() {
           bank_account_number: ibanResult.normalized,
           ...(bankName ? { bank_name: bankName } : {}),
         },
-        { transferId: params.transferId }
+        { transferId: params.id }
       );
       const refreshed = await fetchCustomerInfo(domain, token, account!, RECEIVER_TYPE);
       setCustomer(refreshed);
@@ -222,7 +222,7 @@ function RecipientShell({ children }: { children: React.ReactNode }) {
       <div className="mb-8 flex items-center gap-2">
         <span className="text-lg font-semibold tracking-tight text-white">Ferry</span>
         <span className="rounded-full border border-white/15 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-zinc-400">
-          Recipient
+          Claim payout
         </span>
       </div>
       {children}
