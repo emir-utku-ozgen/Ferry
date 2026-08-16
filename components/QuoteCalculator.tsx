@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { fetchFirmQuote, fetchIndicativePrice, type FirmQuote, type Sep38Fee } from "@/lib/stellar/client/sep38Client";
+import { ApiError } from "@/lib/stellar/client/http";
 
 // EUR → TRY is Ferry's showcased corridor (sender pays EUR, recipient is
 // paid out in Turkish Lira — both fiat, both via licensed Anchors). It's
@@ -35,6 +36,20 @@ function currencyLabel(asset: string): string {
   if (asset === "stellar:native") return "XLM";
   const parts = asset.split(":");
   return parts.length >= 2 ? parts[1] : asset;
+}
+
+// `testanchor.stellar.org`'s SEP-38 /info only advertises SRT, USDC, XLM,
+// USD and CAD (verified live) — EUR and TRY were never configured on it at
+// all. That 404 is a real, anchor-side "this pair isn't supported" answer,
+// not a bug in how Ferry builds the request, so it's worth surfacing as
+// its own clear message instead of the anchor's raw JSON body.
+const UNSUPPORTED_ASSET_PATTERN = /sell_asset not found|buy_asset not found/i;
+
+function describeQuoteError(err: unknown, sellAsset: string, buyAsset: string): string {
+  if (err instanceof ApiError && err.status === 404 && UNSUPPORTED_ASSET_PATTERN.test(err.message)) {
+    return `This anchor doesn't support ${currencyLabel(sellAsset)} → ${currencyLabel(buyAsset)} yet — no EUR/TRY-capable anchor is configured for this Testnet demo (see CORRIDOR_VERIFICATION.md). Try USD → USDC, USD → XLM, or USD → SRT instead to see a live quote today.`;
+  }
+  return err instanceof Error ? err.message : "Failed to fetch quote";
 }
 
 function FeeBreakdown({ fee }: { fee: Sep38Fee }) {
@@ -98,7 +113,7 @@ export default function QuoteCalculator({ anchorDomain, token, lockedQuote, onQu
       });
       setIndicative(price);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to fetch quote");
+      setError(describeQuoteError(err, sellAsset, buyAsset));
     } finally {
       setLoading(false);
     }
@@ -117,7 +132,7 @@ export default function QuoteCalculator({ anchorDomain, token, lockedQuote, onQu
       });
       onQuoteLocked(quote);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to lock quote");
+      setError(describeQuoteError(err, sellAsset, buyAsset));
     } finally {
       setLocking(false);
     }
