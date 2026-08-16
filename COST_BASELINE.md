@@ -1,5 +1,7 @@
 # Ferry — Cost & Speed Baseline: EUR → TRY Corridor
 
+**Superseded by `CORRIDOR_VERIFICATION.md` §7**, which replaces the "generally known" figures below with individually sourced and dated ones (including one live-fetched quote) — see that section for the current version of this comparison. This document is kept for its structural-differentiation argument (§2 below, still accurate) but its cost figures should be treated as the earlier, less-rigorously-sourced draft.
+
 **Status:** Illustrative market comparison based on generally known, publicly published fee structures for each channel. Figures are **indicative ranges, not live-verified quotes** — remittance pricing for all three incumbent channels varies by corridor, payment method, amount, and promotional pricing, and changes frequently. Before this document is used in any external submission, the team should pull current, dated quotes directly from each provider for the specific EUR→TRY amount and corridor being represented, and cite the source and date. This document should not be presented as an audited or officially sourced cost study as-is.
 
 ---
