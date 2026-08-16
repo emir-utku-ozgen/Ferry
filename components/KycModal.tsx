@@ -8,6 +8,7 @@ import {
   type Sep12Status,
 } from "@/lib/stellar/client/sep12Client";
 import { validateIban } from "@/lib/iban";
+import type { FlowError } from "@/components/StatusTracker";
 
 interface KycModalProps {
   anchorDomain: string;
@@ -15,7 +16,9 @@ interface KycModalProps {
   token: string;
   transferId?: string;
   onClose: () => void;
-  onStatusChange: (status: Sep12Status) => void;
+  onStatusChange: (status: Sep12Status, message?: string) => void;
+  /** Surfaces the shared designed error screen (StatusTracker) for KYC rejection and invalid-IBAN submissions. */
+  onFlowError?: (error: FlowError) => void;
 }
 
 // Always shown (SEP-31 senders): identity. Shown under "Bank / IBAN details"
@@ -30,7 +33,15 @@ const IBAN_FIELD_NAME = "bank_account_number";
  * (`/api/sep12/customer`), the same non-custodial handoff pattern as the
  * SEP-24 hosted UI.
  */
-export default function KycModal({ anchorDomain, publicKey, token, transferId, onClose, onStatusChange }: KycModalProps) {
+export default function KycModal({
+  anchorDomain,
+  publicKey,
+  token,
+  transferId,
+  onClose,
+  onStatusChange,
+  onFlowError,
+}: KycModalProps) {
   const [customer, setCustomer] = useState<Sep12CustomerInfo | null>(null);
   const [values, setValues] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
@@ -59,7 +70,12 @@ export default function KycModal({ anchorDomain, publicKey, token, transferId, o
 
   async function submit() {
     if (ibanValue && ibanResult && !ibanResult.valid) {
-      setError(`IBAN: ${ibanResult.reason}`);
+      const message = `IBAN: ${ibanResult.reason}`;
+      setError(message);
+      // Also surfaces the shared designed "Invalid IBAN" error screen
+      // (StatusTracker) so this failure mode has one consistent, testable
+      // treatment app-wide — not just this modal's inline field hint.
+      onFlowError?.({ type: "invalid_recipient_details", message });
       return;
     }
     setSubmitting(true);
@@ -69,8 +85,14 @@ export default function KycModal({ anchorDomain, publicKey, token, transferId, o
       await submitCustomerInfo(anchorDomain, token, submission, { transferId });
       const refreshed = await fetchCustomerInfo(anchorDomain, token, publicKey);
       setCustomer(refreshed);
-      onStatusChange(refreshed.status);
+      onStatusChange(refreshed.status, refreshed.message);
       if (refreshed.status === "ACCEPTED") onClose();
+      if (refreshed.status === "REJECTED") {
+        onFlowError?.({
+          type: "kyc_rejected",
+          message: refreshed.message ?? "The anchor rejected the submitted customer record.",
+        });
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to submit KYC details");
     } finally {

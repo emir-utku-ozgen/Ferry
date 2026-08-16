@@ -39,22 +39,46 @@ const DEPOSIT_INITIATED_STATUSES = new Set([
   "pending_user_transfer_complete",
 ]);
 
-const ERROR_COPY: Record<FlowErrorType, { title: string; hint: string }> = {
+/**
+ * Failure Matrix (SOW Deliverable 2/3): the 4 named failure modes, each
+ * with a designed error screen and an explicit "clean refund" status.
+ *
+ * The refund reasoning below is a structural fact about Ferry's current
+ * SEP-31 orchestration, not a blanket claim: Ferry only ever displays the
+ * anchor's deposit instructions (`stellar_account_id` / `stellar_memo`)
+ * *after* `POST /transactions` succeeds, and sending is gated on KYC
+ * being `ACCEPTED` and the locked quote being unexpired. All four of
+ * these failure types are raised strictly *before* that point — so in
+ * every case, no Stellar payment was ever sent, which is what "clean"
+ * asserts here. This does not extend to a funded SEP-24 hosted deposit
+ * that fails after the user already paid the anchor — that path is
+ * tracked separately via the anchor's own `refunded` transaction status
+ * (`Sep24Panel`, `TransferPanel.tsx`), not through this error union.
+ */
+const ERROR_COPY: Record<FlowErrorType, { title: string; hint: string; refundDetail: string }> = {
   quote_expired: {
     title: "Quote expired",
     hint: "The locked rate is no longer valid. Return to the rate calculator and lock a fresh quote before continuing.",
+    refundDetail:
+      "The expired quote was never submitted to the anchor — sending is blocked client-side before any request goes out, so no funds left your wallet.",
   },
   anchor_rejected: {
     title: "Anchor rejected the request",
     hint: "The receiving anchor declined this transaction. See the message below for the anchor's stated reason.",
+    refundDetail:
+      "Ferry only shows the anchor's deposit instructions after a SEP-31 transaction is successfully created. Since the anchor rejected the request itself, that point was never reached — no Stellar payment was ever sent.",
   },
   invalid_recipient_details: {
     title: "Recipient bank details rejected",
     hint: "The IBAN or bank account details the anchor received couldn't be validated. Reopen KYC and re-enter them.",
+    refundDetail:
+      "Same as an anchor rejection above: the anchor refused the transaction request before Ferry ever displayed deposit instructions, so no funds were sent for this rejected IBAN/bank record.",
   },
   kyc_rejected: {
     title: "KYC verification rejected",
     hint: "The anchor rejected the submitted customer information. Review and resubmit in the KYC step.",
+    refundDetail:
+      "Sending is disabled until KYC status is ACCEPTED — a rejected KYC record never reaches the point where a SEP-31 transaction, let alone a payment, could be created.",
   },
 };
 
@@ -152,6 +176,15 @@ export default function StatusTracker({
           <p className="text-sm font-semibold text-red-300">{ERROR_COPY[error.type].title}</p>
           <p className="mt-1 text-[11px] leading-relaxed text-red-200/80">{ERROR_COPY[error.type].hint}</p>
           <p className="mt-2 rounded bg-black/30 p-2 font-mono text-[11px] text-red-300/90">{error.message}</p>
+          <div className="mt-3 flex items-start gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-2.5">
+            <span className="mt-0.5 shrink-0 text-emerald-400" aria-hidden>
+              ✓
+            </span>
+            <p className="text-[11px] leading-relaxed text-emerald-200/80">
+              <span className="font-semibold text-emerald-300">Clean refund status: </span>
+              {ERROR_COPY[error.type].refundDetail}
+            </p>
+          </div>
           {onDismissError && (
             <button
               onClick={onDismissError}

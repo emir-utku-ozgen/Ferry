@@ -369,6 +369,28 @@ function Sep24Panel({ anchorDomain, publicKey, token, lockedQuote, onTransferSta
         <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3">
           <p className="text-xs text-zinc-500">Live transaction status</p>
           <p className="mt-1 text-sm font-semibold text-emerald-300">{status.status}</p>
+          {(status.refunded || status.status === "refunded") && (
+            <div className="mt-2 border-t border-white/10 pt-2">
+              <p className="text-[11px] font-semibold text-emerald-300">✓ Refunded by anchor</p>
+              {status.refunds ? (
+                <>
+                  <p className="mt-1 text-[11px] text-zinc-400">
+                    {status.refunds.amount_refunded} refunded
+                    {status.refunds.amount_fee && status.refunds.amount_fee !== "0" ? ` (anchor fee ${status.refunds.amount_fee})` : ""}
+                  </p>
+                  {status.refunds.payments?.map((p) => (
+                    <p key={p.id} className="text-[11px] text-zinc-600">
+                      · {p.amount} via {p.id_type ?? "payment"} <span className="font-mono">{p.id}</span>
+                    </p>
+                  ))}
+                </>
+              ) : (
+                <p className="mt-1 text-[11px] text-zinc-500">
+                  The anchor reported this transaction as refunded but didn&apos;t include refund payment details.
+                </p>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>

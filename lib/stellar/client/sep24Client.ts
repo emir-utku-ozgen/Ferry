@@ -49,6 +49,20 @@ export async function startSep24Withdrawal(
   return parseJsonOrThrow<InteractiveSession>(res);
 }
 
+export interface Sep24RefundPayment {
+  id: string;
+  id_type?: string;
+  amount: string;
+  fee?: string;
+}
+
+/** Per SEP-24 §"Fields for a Refunded Transaction" — populated by the anchor when it refunds a deposit/withdrawal. */
+export interface Sep24Refunds {
+  amount_refunded: string;
+  amount_fee: string;
+  payments?: Sep24RefundPayment[];
+}
+
 export interface Sep24TransactionStatus {
   id: string;
   kind?: string;
@@ -57,6 +71,8 @@ export interface Sep24TransactionStatus {
   more_info_url?: string;
   amount_in?: string;
   amount_out?: string;
+  refunded?: boolean;
+  refunds?: Sep24Refunds;
   [key: string]: unknown;
 }
 

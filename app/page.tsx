@@ -154,6 +154,7 @@ export default function Home() {
           transferId={lockedQuote?.id}
           onClose={() => setKycModalOpen(false)}
           onStatusChange={setKycStatus}
+          onFlowError={setFlowError}
         />
       )}
 
