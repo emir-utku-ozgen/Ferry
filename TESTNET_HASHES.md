@@ -1,8 +1,8 @@
 # Ferry — Testnet Transaction Evidence
 
-**Status:** Genuine, live evidence only. §1–§7 came from a real run against Stellar Testnet and the public reference anchor (`testanchor.stellar.org`) on 2026-08-13, executed through Ferry's own `/api/*` orchestrator routes exactly as the browser UI calls them. §8 is a second, later run (2026-08-16) against Ferry's own mock anchor (`mock-anchor/`) for the EUR(EURC)→TRY corridor, held to the same standard. Nothing in this document is simulated or invented.
+**Status:** Genuine, live evidence only. §1–§7 came from a real run against Stellar Testnet and the public reference anchor (`testanchor.stellar.org`) on 2026-08-13, executed through Ferry's own `/api/*` orchestrator routes exactly as the browser UI calls them. §8 is a second run (2026-08-16) against Ferry's own mock anchor (`mock-anchor/`) for the EUR(EURC)→TRY corridor, held to the same standard — §8.2–§8.3 record the SEP-10/38/12/31 chain plus the EURC-funding blocker as it stood earlier that day; §8.4, later the same day, records the payment itself actually landing and the transfer genuinely reaching `completed` — Ferry's first fully on-chain-settled transfer on record. Nothing in this document is simulated or invented.
 
-Where a requested scenario **could not** be genuinely reproduced, that is stated explicitly, with the reason, rather than filled in with a plausible-looking fake result. See §"Failure scenarios" below §7, and §8.4 for the EURC leg specifically.
+Where a requested scenario **could not** be genuinely reproduced, that is stated explicitly, with the reason, rather than filled in with a plausible-looking fake result. See §"Failure scenarios" below §7, and §8.3 for the (since-resolved) EURC-funding blocker specifically.
 
 ---
 
@@ -127,6 +127,43 @@ Completing this last step requires the sender account to actually hold Testnet E
 3. **Stellar Testnet DEX liquidity** — checked directly via Horizon: the real EURC asset's total liquidity-pool depth on Testnet is `0.0856606 EURC` across 3 pools (`GET /assets?asset_code=EURC&asset_issuer=GB3Q6Q...`), and the one resting order-book offer found priced EURC at an implausible 40,000:1 against XLM with sub-1-unit size — neither is sufficient to acquire a usable EURC balance via a path payment.
 
 **What this means in practice:** the entire request/response chain — SEP-10 auth, SEP-38 pricing, SEP-12 KYC, SEP-31 transaction creation — is real, live-verified, and runs through Ferry's actual orchestrator code exactly as the browser UI would call it. The one link that could not be exercised end-to-end is the final on-chain EURC transfer itself, blocked entirely by *external* Testnet EURC acquisition constraints (§8.3 above), not by anything in Ferry's own code or the mock anchor. Anyone who *does* hold Testnet EURC can complete this run themselves: send the quoted amount, with a text memo equal to the transaction id, to the `stellar_account_id` above, and the mock anchor's own background poller (`mock-anchor/server.js`) will detect it and complete the transaction within 5 seconds — no manual intervention required on the anchor side.
+
+**Update, same day: this final link has since been closed — see §8.4.**
+
+### 8.4 Completion — a real EURC payment, genuinely settled (2026-08-16, later same day)
+
+The repo owner obtained real Testnet EURC in their own wallet from Circle's public faucet and completed the run described above as its own SEP-10-authenticated session (a fresh account, not the Friendbot-only sender in §8.1 — that account never received EURC). Full chain, in order:
+
+1. **SEP-10, signed by the account holder's own wallet.** Ferry's `/api/sep10/challenge` built the challenge; the account holder signed it via Stellar Laboratory's transaction signer (`laboratory.stellar.org/#txsigner`) connected to Freighter — the private key never left the extension, exactly as the architecture requires. The signed XDR was exchanged via `/api/sep10/token` for a JWT scoped to `GDN3U7JKXSEMR65YFI3BU3JDQYFFNPMH5RP7YOOY43XIDDUZC6D6TS6A`.
+2. **Real bug found and fixed mid-run:** the mock anchor's own receiving account (`GBDODNXHPROEII5UX3T23GOLDD53XMDQHNLDXEFHIL2CIPPXFHXTGHAF`) had never established a trustline to EURC — an oversight in `mock-anchor/` from when it was first built, never previously caught because no run had gotten this far. The first payment attempt correctly failed with `op_no_trust`. Fixed by submitting a `ChangeTrust` operation signed with the receiving account's own key (`mock-anchor/.env`'s `SIGNING_SECRET` — infrastructure Ferry's own tooling controls, not a user's key):
+   ```
+   Trustline tx hash: 3a5793498f2386f19198044cc061bb710d9fdd6c8fee6bfcb31149366ed9251f
+   ```
+3. **First payment attempt sent with the wrong memo** (a Freighter UI mix-up — the literal string `"Text"` was submitted instead of the transaction id) — landed successfully on-chain (`ad6676c1fa41a49eee96d07fa3e504fdfa28eb16b33c77f01478c491f810e128`, 0.005 EURC) but could not be matched to a SEP-31 transaction, by design: the mock anchor's memo-matching guard exists specifically so an incoming payment can't be silently credited to the wrong transfer, and it was not overridden or force-matched. Recorded here for completeness, not presented as a settled transfer.
+4. **Second attempt, correct memo, genuinely completed:**
+   ```
+   Stellar transaction hash: 5b6f6a3378f5e0cf446b420e1adc52b1027e0493869d5087d9ce8cb78c15af91
+   From:                     GDN3U7JKXSEMR65YFI3BU3JDQYFFNPMH5RP7YOOY43XIDDUZC6D6TS6A
+   To:                       GBDODNXHPROEII5UX3T23GOLDD53XMDQHNLDXEFHIL2CIPPXFHXTGHAF
+   Asset:                    EURC (GB3Q6QDZYTHWT7E5PVS3W7FUT5GVAFC5KSZFFLPU25GO7VTC3NM2ZTVO)
+   Amount:                   0.0009000
+   Memo:                     6dt9lah4  (= the SEP-31 transaction id)
+   successful:               true
+   Explorer:                 https://stellar.expert/explorer/testnet/tx/5b6f6a3378f5e0cf446b420e1adc52b1027e0493869d5087d9ce8cb78c15af91
+   ```
+   The mock anchor's background poller (`mock-anchor/server.js`, unmodified detection logic) matched this **independently**, on its own 5-second poll cycle, and set the SEP-31 transaction's status to `completed` with `stellar_transaction_id` equal to the hash above — confirmed by querying `GET /api/sep31/transactions?id=6dt9lah4` directly, not by trusting a log line.
+5. **The demo TRY payout also fired** (a `MOCK_PAYOUT_DEMO_ACCOUNT` was configured from an earlier session), producing a second, independent real transaction:
+   ```
+   Stellar transaction hash: f46f134cbb85f7129ab4e61ff4e7f76aa8838fdf559d19cc2442c9a0a31db355
+   From:                     GADBO465IHRW3WNOCNM7H5UEXKER4TGT2FSBYUDHMKFOAYR2YHAQ72FZ (mock TRY issuer)
+   To:                       GCWF5ZQBC6P4YFTM5TKYOC3KVGOENITGCNC2KZMYYPJQIL7H34HZ2TWN
+   Asset:                    TRY (GADBO465IHRW3WNOCNM7H5UEXKER4TGT2FSBYUDHMKFOAYR2YHAQ72FZ)
+   Amount:                   0.0398498
+   successful:               true
+   ```
+   As stated in `mock-anchor/README.md`: this is a demonstration artifact, not a claim about how real SEP-31 payouts work (those are a bank wire, with no Stellar leg at all).
+
+**This closes the gap §8.3 documented as blocking**: Ferry's SEP-10 → SEP-38 → SEP-12 → SEP-31 chain, run through its own orchestrator code, now has one genuine, independently-verifiable, on-chain-settled transfer to point to — not a fabricated status, not a hand-set flag. Both hashes above are checkable by anyone at `https://horizon-testnet.stellar.org/transactions/<hash>` or Stellar Expert, indefinitely (unlike the mock anchor's own JWTs/IDs, on-chain transactions don't require the mock anchor to still be running).
 
 ---
 

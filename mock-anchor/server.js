@@ -99,10 +99,38 @@ function requireBearerAccount(req, res) {
   }
 }
 
+/**
+ * The receiving account can't accept a SEP-31 sender's EURC payment without
+ * first trusting the asset — a real anchor's own onboarding would set this
+ * up once, out of band. Found live: a run got all the way through SEP-10 →
+ * SEP-38 → SEP-12 → SEP-31 creation before the sender's payment failed with
+ * `op_no_trust`, because this had never been established for this account.
+ * Checked and fixed idempotently on every boot so it can't recur — cheap
+ * (one Horizon read, and a ChangeTrust submit only when actually missing).
+ */
+async function ensureTrustline(keypair, asset, label) {
+  const account = await server.loadAccount(keypair.publicKey());
+  const alreadyTrusts = account.balances.some(
+    (b) => b.asset_code === asset.getCode() && b.asset_issuer === asset.getIssuer()
+  );
+  if (alreadyTrusts) return;
+
+  console.log(`[mock-anchor] ${label} has no ${asset.getCode()} trustline yet — establishing one...`);
+  const tx = new TransactionBuilder(account, { fee: "10000", networkPassphrase: NETWORK_PASSPHRASE })
+    .addOperation(Operation.changeTrust({ asset }))
+    .setTimeout(60)
+    .build();
+  tx.sign(keypair);
+  const res = await server.submitTransaction(tx);
+  console.log(`[mock-anchor] ${label} ${asset.getCode()} trustline established: ${res.hash}`);
+}
+
 async function main() {
   const signingKeypair = await loadOrGenerateKeypair("SIGNING_SECRET", "SEP-10 signing / receiving account");
   const tryIssuerKeypair = await loadOrGenerateKeypair("TRY_ISSUER_SECRET", "mock TRY issuer");
   const TRY = new Asset("TRY", tryIssuerKeypair.publicKey());
+
+  await ensureTrustline(signingKeypair, new Asset("EURC", EURC_ISSUER), "receiving account");
 
   // Optional, off by default: an account to send a small demonstrative
   // TRY-asset payment to once a transaction completes. Real SEP-31 payouts
