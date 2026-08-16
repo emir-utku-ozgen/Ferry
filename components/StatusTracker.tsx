@@ -31,12 +31,20 @@ const STEPS = [
 
 const SETTLED_STATUSES = new Set(["completed"]);
 const DEPOSIT_INITIATED_STATUSES = new Set([
+  // SEP-24 statuses
   "incomplete",
   "pending_user_transfer_start",
   "pending_anchor",
   "pending_stellar",
   "pending_external",
   "pending_user_transfer_complete",
+  // SEP-31 statuses — added once TransferPanel's Sep31Panel started
+  // actually polling transaction status instead of only ever reporting a
+  // one-time optimistic "pending_external" that never updated again.
+  "pending_sender",
+  "pending_receiver",
+  "pending_customer_info_update",
+  "pending_transaction_info_update",
 ]);
 
 /**

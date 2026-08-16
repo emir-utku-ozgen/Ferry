@@ -10,7 +10,12 @@ import {
   type InteractiveSession,
   type Sep24TransactionStatus,
 } from "@/lib/stellar/client/sep24Client";
-import { createSep31Transaction, type Sep31TransactionResult } from "@/lib/stellar/client/sep31Client";
+import {
+  createSep31Transaction,
+  fetchSep31Transaction,
+  type Sep31TransactionResult,
+  type Sep31TransactionStatus,
+} from "@/lib/stellar/client/sep31Client";
 import type { FirmQuote } from "@/lib/stellar/client/sep38Client";
 import { NETWORK_PASSPHRASE } from "@/lib/stellar/config";
 import { buildChangeTrustXdr, describeLowReserveError, hasTrustline, submitSignedTransaction } from "@/lib/stellar/trustline";
@@ -410,16 +415,47 @@ function Sep31Panel({ anchorDomain, publicKey, token, lockedQuote, kycStatus, on
   const [amount, setAmount] = useState(lockedQuote?.sell_amount ?? "10");
   const [assetCode, setAssetCode] = useState<string>(SEP24_ASSETS[0].code);
   const [result, setResult] = useState<Sep31TransactionResult | null>(null);
+  const [status, setStatus] = useState<Sep31TransactionStatus | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const [linkCopied, setLinkCopied] = useState(false);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     if (!lockedQuote) return;
     const interval = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(interval);
   }, [lockedQuote]);
+
+  // The piece that was missing: creating a SEP-31 transaction only ever
+  // set an optimistic one-time status ("pending_external"); nothing polled
+  // the anchor afterward, so a transfer that genuinely settled on-chain
+  // never made the status tracker's "Completed / Delivered" step go green,
+  // and there was nowhere in the UI a completed transfer's own hash showed
+  // up. Mirrors Sep24Panel's existing poll loop below.
+  function startPolling(id: string) {
+    if (pollRef.current) clearInterval(pollRef.current);
+    pollRef.current = setInterval(async () => {
+      try {
+        const tx = await fetchSep31Transaction(anchorDomain, token, id);
+        setStatus(tx);
+        onTransferStatusChange(tx.status);
+        if (TERMINAL_STATUSES.has(tx.status) && pollRef.current) {
+          clearInterval(pollRef.current);
+          pollRef.current = null;
+        }
+      } catch {
+        // Transient network error — keep polling, next tick may succeed.
+      }
+    }, POLL_INTERVAL_MS);
+  }
 
   const quoteExpired = lockedQuote ? now >= new Date(lockedQuote.expires_at).getTime() : false;
   const kycRequired = kycStatus !== "ACCEPTED";
@@ -457,6 +493,7 @@ function Sep31Panel({ anchorDomain, publicKey, token, lockedQuote, kycStatus, on
     setError(null);
     onFlowError(null);
     setResult(null);
+    setStatus(null);
     try {
       const tx = await createSep31Transaction(
         anchorDomain,
@@ -471,7 +508,8 @@ function Sep31Panel({ anchorDomain, publicKey, token, lockedQuote, kycStatus, on
         { idempotencyKey: crypto.randomUUID() }
       );
       setResult(tx);
-      onTransferStatusChange("pending_external");
+      onTransferStatusChange("pending_receiver");
+      startPolling(tx.id);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to create SEP-31 transaction";
       setError(message);
@@ -602,6 +640,24 @@ function Sep31Panel({ anchorDomain, publicKey, token, lockedQuote, kycStatus, on
                   memo <span className="font-mono text-emerald-300">{result.stellar_memo}</span>
                 </>
               )}
+            </p>
+          )}
+        </div>
+      )}
+
+      {status && (
+        <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3">
+          <p className="text-xs text-zinc-500">Live transaction status</p>
+          <p className="mt-1 text-sm font-semibold text-emerald-300">{status.status}</p>
+          {status.stellar_transaction_id && (
+            <div className="mt-2 border-t border-white/10 pt-2">
+              <p className="text-[11px] font-semibold text-emerald-300">✓ Settlement payment confirmed on-chain</p>
+              <p className="mt-1 break-all font-mono text-[11px] text-zinc-400">{status.stellar_transaction_id}</p>
+            </div>
+          )}
+          {status.payout_stellar_transaction_id && (
+            <p className="mt-1 break-all font-mono text-[11px] text-zinc-600">
+              payout {status.payout_stellar_transaction_id}
             </p>
           )}
         </div>
