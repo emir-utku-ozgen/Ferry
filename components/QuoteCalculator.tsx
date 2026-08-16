@@ -4,6 +4,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { fetchFirmQuote, fetchIndicativePrice, type FirmQuote, type Sep38Fee } from "@/lib/stellar/client/sep38Client";
 import { ApiError } from "@/lib/stellar/client/http";
 import { EURC_ISSUER, MOCK_TRY_ISSUER } from "@/lib/stellar/config";
+import { fetchAnchorCurrencies, findCurrencyAsset, type AnchorCurrency } from "@/lib/stellar/client/anchorClient";
 
 // EUR → TRY is Ferry's showcased corridor (sender pays EUR, recipient is
 // paid out in Turkish Lira). The EUR leg is represented by Circle's real
@@ -45,6 +46,26 @@ function currencyLabel(asset: string): string {
   if (asset === "stellar:native") return "XLM";
   const parts = asset.split(":");
   return parts.length >= 2 ? parts[1] : asset;
+}
+
+/**
+ * Resolves a `stellar:<code>:<issuer>` value against whichever issuer the
+ * *currently configured* anchor actually publishes for that code (via its
+ * SEP-1 `[[CURRENCIES]]` list), falling back to the hardcoded default when
+ * the anchor doesn't list it. This is what makes the TRY (and any other
+ * Stellar-asset) option work against `mock-anchor/` regardless of which
+ * issuer keypair that particular running instance happens to be using —
+ * `mock-anchor/`'s TRY issuer is only fixed for as long as its `.env`
+ * pins one; without that, a fresh boot generates a different keypair, and
+ * a hardcoded `NEXT_PUBLIC_MOCK_TRY_ISSUER` default would silently go
+ * stale. `iso4217:*` and `stellar:native` values have no issuer to
+ * resolve and are returned unchanged.
+ */
+function resolveAssetValue(staticValue: string, currencies: AnchorCurrency[]): string {
+  const parts = staticValue.split(":");
+  if (parts[0] !== "stellar" || parts.length < 3) return staticValue;
+  const code = parts[1];
+  return findCurrencyAsset(currencies, code) ?? staticValue;
 }
 
 // `testanchor.stellar.org`'s SEP-38 /info only advertises SRT, USDC, XLM,
@@ -93,6 +114,7 @@ export default function QuoteCalculator({ anchorDomain, token, lockedQuote, onQu
   const [locking, setLocking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
+  const [anchorCurrencies, setAnchorCurrencies] = useState<AnchorCurrency[]>([]);
 
   // Live countdown for the locked quote's expiry — re-renders once a
   // second so "Refresh quote" appears the instant it goes stale, instead
@@ -102,6 +124,25 @@ export default function QuoteCalculator({ anchorDomain, token, lockedQuote, onQu
     const interval = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(interval);
   }, [lockedQuote]);
+
+  // Discover the currently-configured anchor's real asset issuers (SEP-1
+  // CURRENCIES) whenever the anchor changes, so sellAsset/buyAsset resolve
+  // against reality instead of a hardcoded guess — see resolveAssetValue().
+  // Best-effort: an anchor that doesn't expose this, or a transient
+  // failure, just leaves the hardcoded fallback in place.
+  useEffect(() => {
+    let cancelled = false;
+    fetchAnchorCurrencies(anchorDomain)
+      .then((currencies) => {
+        if (!cancelled) setAnchorCurrencies(currencies);
+      })
+      .catch(() => {
+        if (!cancelled) setAnchorCurrencies([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [anchorDomain]);
 
   const expiresAtMs = lockedQuote ? new Date(lockedQuote.expires_at).getTime() : null;
   const quoteExpired = expiresAtMs !== null && now >= expiresAtMs;
@@ -113,16 +154,18 @@ export default function QuoteCalculator({ anchorDomain, token, lockedQuote, onQu
     setError(null);
     setIndicative(null);
 
+    const resolvedSell = resolveAssetValue(sellAsset, anchorCurrencies);
+    const resolvedBuy = resolveAssetValue(buyAsset, anchorCurrencies);
     try {
       const price = await fetchIndicativePrice(anchorDomain, {
-        sell_asset: sellAsset,
-        buy_asset: buyAsset,
+        sell_asset: resolvedSell,
+        buy_asset: resolvedBuy,
         sell_amount: amount,
         context: "sep31",
       });
       setIndicative(price);
     } catch (err) {
-      setError(describeQuoteError(err, sellAsset, buyAsset));
+      setError(describeQuoteError(err, resolvedSell, resolvedBuy));
     } finally {
       setLoading(false);
     }
@@ -132,16 +175,18 @@ export default function QuoteCalculator({ anchorDomain, token, lockedQuote, onQu
     if (!token) return;
     setLocking(true);
     setError(null);
+    const resolvedSell = resolveAssetValue(sellAsset, anchorCurrencies);
+    const resolvedBuy = resolveAssetValue(buyAsset, anchorCurrencies);
     try {
       const quote = await fetchFirmQuote(anchorDomain, token, {
-        sell_asset: sellAsset,
-        buy_asset: buyAsset,
+        sell_asset: resolvedSell,
+        buy_asset: resolvedBuy,
         sell_amount: amount,
         context: "sep31",
       });
       onQuoteLocked(quote);
     } catch (err) {
-      setError(describeQuoteError(err, sellAsset, buyAsset));
+      setError(describeQuoteError(err, resolvedSell, resolvedBuy));
     } finally {
       setLocking(false);
     }

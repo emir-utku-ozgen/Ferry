@@ -33,7 +33,9 @@ cp .env.example .env   # optional — leave secrets blank to auto-generate + Fri
 npm start
 ```
 
-On first boot with no `SIGNING_SECRET` / `TRY_ISSUER_SECRET` set, the server generates fresh Testnet keypairs, funds them via Friendbot, and prints them once — copy them into `.env` if you want the same anchor identity (and therefore the same `TRY` asset) across restarts. `HOME_DOMAIN` defaults to `localhost:4001`, matching `PORT`.
+On first boot with no `SIGNING_SECRET` / `TRY_ISSUER_SECRET` set, the server generates fresh Testnet keypairs, funds them via Friendbot, and prints them once — copy them into `.env` if you want the same anchor identity across restarts. `HOME_DOMAIN` defaults to `localhost:4001`, matching `PORT`.
+
+**You don't strictly need to, though.** Ferry's frontend discovers this server's actual `TRY` issuer at request time from its own `stellar.toml` (`GET /api/anchor/currencies`, `lib/stellar/client/anchorClient.ts`) rather than assuming a fixed, hardcoded issuer — so restarting this server with a *different* freshly-generated TRY keypair still works against Ferry without any frontend config change. Pinning the keys in `.env` is still worth doing if you want a stable identity to reference across sessions (e.g. in `TESTNET_HASHES.md`-style evidence), not because Ferry requires it to function.
 
 ## Pointing Ferry at it
 
@@ -44,7 +46,9 @@ NEXT_PUBLIC_ANCHOR_DOMAIN=localhost:4001
 ANCHOR_ALLOWLIST=localhost:4001
 ```
 
-`lib/stellar/toml.ts` has a narrow exception permitting plain-HTTP `stellar.toml` resolution for `localhost`/`127.0.0.1` domains specifically (this server has no TLS certificate) — every other domain still requires HTTPS exactly as before. If you also want the existing USD/CAD → USDC/XLM/SRT pairs to keep working against the public reference anchor in the same session, include both domains in `ANCHOR_ALLOWLIST` (comma-separated) — but only one can be `NEXT_PUBLIC_ANCHOR_DOMAIN` at a time, since that's the single anchor Ferry's UI currently targets for every pairing (see `docs/RUNBOOK.md` §2 for the full config reference).
+A full URL (`http://localhost:4001`) works too for either variable — `lib/stellar/config.ts` and `lib/stellar/anchorAllowlist.ts` both strip a leading `http://`/`https://` before comparing or resolving.
+
+`lib/stellar/toml.ts` has a narrow exception permitting plain-HTTP `stellar.toml` resolution for `localhost`/`127.0.0.1` domains specifically (this server has no TLS certificate) — every other domain still requires HTTPS exactly as before. That same module also caches a resolved `stellar.toml` for only 15 seconds for local domains (5 minutes for everything else) — specifically so restarting this server mid-session doesn't leave Ferry's dev server serving a stale toml (and therefore a stale TRY issuer) for the rest of its process lifetime. If you also want the existing USD/CAD → USDC/XLM/SRT pairs to keep working against the public reference anchor in the same session, include both domains in `ANCHOR_ALLOWLIST` (comma-separated) — but only one can be `NEXT_PUBLIC_ANCHOR_DOMAIN` at a time, since that's the single anchor Ferry's UI currently targets for every pairing (see `docs/RUNBOOK.md` §2 for the full config reference).
 
 ## Why a custom mock instead of the real Anchor Platform
 

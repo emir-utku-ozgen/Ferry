@@ -17,21 +17,36 @@ import { AnchorError } from "./anchorError";
 
 const DEFAULT_ALLOWLIST = ["testanchor.stellar.org"];
 
+/**
+ * Strips a leading `http://`/`https://` scheme and any trailing slash, so
+ * `http://localhost:4001`, `http://localhost:4001/`, and `localhost:4001`
+ * all resolve to the same bare domain everything downstream (the
+ * allowlist, SEP-1 TOML resolution, `NEXT_PUBLIC_HOME_DOMAIN` comparisons)
+ * expects. Anchors are configured and compared by domain, not by URL —
+ * this is the one place that forgives someone pasting a full URL instead.
+ */
+export function normalizeAnchorDomain(domain: string): string {
+  return domain.trim().replace(/^https?:\/\//i, "").replace(/\/+$/, "");
+}
+
 function parseAllowlist(): Set<string> {
   const raw = process.env.ANCHOR_ALLOWLIST;
   const domains = raw
-    ? raw.split(",").map((d) => d.trim().toLowerCase()).filter(Boolean)
+    ? raw.split(",").map((d) => normalizeAnchorDomain(d).toLowerCase()).filter(Boolean)
     : DEFAULT_ALLOWLIST;
   return new Set(domains);
 }
 
 const allowlist = parseAllowlist();
 
-export function assertAllowedAnchor(domain: string): void {
-  if (!allowlist.has(domain.toLowerCase())) {
+/** Returns the normalized domain on success — callers should use this value, not their original input, for everything downstream. */
+export function assertAllowedAnchor(domain: string): string {
+  const normalized = normalizeAnchorDomain(domain);
+  if (!allowlist.has(normalized.toLowerCase())) {
     throw new AnchorError(
       "ANCHOR_REJECTED",
       `Anchor domain "${domain}" is not on Ferry's allowlist. Configure ANCHOR_ALLOWLIST to add trusted anchors.`
     );
   }
+  return normalized;
 }

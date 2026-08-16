@@ -23,9 +23,20 @@ export const HOME_DOMAIN =
  * Default anchor domain used to resolve stellar.toml (SEP-1) and discover
  * the WEB_AUTH_ENDPOINT / TRANSFER_SERVER_SEP0024 / DIRECT_PAYMENT_SERVER /
  * ANCHOR_QUOTE_SERVER endpoints for SEP-10/24/31/38.
+ *
+ * Tolerates a full URL (e.g. `http://localhost:4001`, for `mock-anchor/`
+ * — see its README) as well as a bare domain — everything downstream
+ * (the allowlist, SEP-1 resolution) expects a bare domain, so a scheme
+ * prefix is stripped here rather than causing a malformed lookup later.
+ * `lib/stellar/anchorAllowlist.ts`'s `assertAllowedAnchor()` does the same
+ * normalization independently for any domain that reaches it a different
+ * way (e.g. a hand-built `/claim/[id]` link) — this is the client-facing
+ * copy of that same tolerance, not a substitute for it.
  */
-export const ANCHOR_DOMAIN =
-  process.env.NEXT_PUBLIC_ANCHOR_DOMAIN || "testanchor.stellar.org";
+export const ANCHOR_DOMAIN = (process.env.NEXT_PUBLIC_ANCHOR_DOMAIN || "testanchor.stellar.org")
+  .trim()
+  .replace(/^https?:\/\//i, "")
+  .replace(/\/+$/, "");
 
 export const APP_URL =
   process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
