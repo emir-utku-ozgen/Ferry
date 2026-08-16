@@ -202,8 +202,9 @@ export default function QuoteCalculator({ anchorDomain, token, lockedQuote, onQu
             You send
             <input
               type="number"
-              min="0"
-              step="0.01"
+              min="0.0001"
+              max="1000"
+              step="0.0001"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
               className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-white/30"

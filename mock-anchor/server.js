@@ -44,6 +44,18 @@ const EURC_ISSUER = "GB3Q6QDZYTHWT7E5PVS3W7FUT5GVAFC5KSZFFLPU25GO7VTC3NM2ZTVO";
 // nobody mistakes this for a real quoted market rate.
 const MOCK_EURC_TRY_RATE = 44.50;
 
+// Testnet-friendly amount range: real Testnet EURC is scarce (Circle's own
+// faucet gives small drips, and there's negligible DEX liquidity to
+// acquire more — see CORRIDOR_VERIFICATION.md §5 / TESTNET_HASHES.md §8.3),
+// so the minimum is set low enough that dust-sized real balances are
+// actually usable end-to-end, not just in theory.
+const MIN_EURC_AMOUNT = 0.0001;
+const MAX_EURC_AMOUNT = 1000;
+
+function amountOutOfRange(amount) {
+  return !(amount >= MIN_EURC_AMOUNT && amount <= MAX_EURC_AMOUNT);
+}
+
 const server = new Horizon.Server(HORIZON_URL);
 
 async function loadOrGenerateKeypair(envVar, label) {
@@ -228,6 +240,14 @@ desc="MOCK / SIMULATED representation of Turkish Lira. Not backed by any bank, n
       return res.status(404).json({ error: "sell_asset or buy_asset not found — this mock anchor only quotes EURC -> TRY" });
     }
     const sellAmt = sell_amount ? Number(sell_amount) : Number(buy_amount) / MOCK_EURC_TRY_RATE;
+    if (amountOutOfRange(sellAmt)) {
+      // SEP-38's own error vocabulary for this — Ferry's TERMINAL_STATUSES
+      // (components/TransferPanel.tsx) already recognizes too_small/too_large.
+      return res.status(400).json({
+        error: sellAmt < MIN_EURC_AMOUNT ? "too_small" : "too_large",
+        message: `sell_amount must be between ${MIN_EURC_AMOUNT} and ${MAX_EURC_AMOUNT} EURC`,
+      });
+    }
     const buyAmt = sell_amount ? Number(sell_amount) * MOCK_EURC_TRY_RATE : Number(buy_amount);
     const fee = (sellAmt * 0.005).toFixed(7);
     res.json({
@@ -246,6 +266,12 @@ desc="MOCK / SIMULATED representation of Turkish Lira. Not backed by any bank, n
       return res.status(404).json({ error: "sell_asset or buy_asset not found — this mock anchor only quotes EURC -> TRY" });
     }
     const sellAmt = sell_amount ? Number(sell_amount) : Number(buy_amount) / MOCK_EURC_TRY_RATE;
+    if (amountOutOfRange(sellAmt)) {
+      return res.status(400).json({
+        error: sellAmt < MIN_EURC_AMOUNT ? "too_small" : "too_large",
+        message: `sell_amount must be between ${MIN_EURC_AMOUNT} and ${MAX_EURC_AMOUNT} EURC`,
+      });
+    }
     const fee = (sellAmt * 0.005).toFixed(7);
     const buyAmt = (sellAmt * MOCK_EURC_TRY_RATE - Number(fee) * MOCK_EURC_TRY_RATE).toFixed(7);
     const id = `mockq_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
@@ -289,8 +315,8 @@ desc="MOCK / SIMULATED representation of Turkish Lira. Not backed by any bank, n
       receive: {
         EURC: {
           enabled: true,
-          min_amount: 1,
-          max_amount: 100000,
+          min_amount: MIN_EURC_AMOUNT,
+          max_amount: MAX_EURC_AMOUNT,
           fields: { transaction: { quote_id: { description: "SEP-38 quote id" } } },
         },
       },
@@ -309,6 +335,16 @@ desc="MOCK / SIMULATED representation of Turkish Lira. Not backed by any bank, n
       return res.status(400).json({ error: "Sender KYC not accepted — complete SEP-12 first" });
     }
     const quote = quote_id ? quotes.get(quote_id) : null;
+    // A quote already carries a validated sell_amount (checked at
+    // /sep38/quote time); a raw `amount` with no quote_id hasn't been
+    // checked yet, so validate it here too rather than trusting the caller.
+    const effectiveAmount = Number(quote ? quote.sell_amount : amount);
+    if (amountOutOfRange(effectiveAmount)) {
+      return res.status(400).json({
+        error: effectiveAmount < MIN_EURC_AMOUNT ? "too_small" : "too_large",
+        message: `amount must be between ${MIN_EURC_AMOUNT} and ${MAX_EURC_AMOUNT} EURC`,
+      });
+    }
     const id = Math.random().toString(36).slice(2, 10); // short — fits as a Stellar text memo
     transactions.set(id, {
       id,
