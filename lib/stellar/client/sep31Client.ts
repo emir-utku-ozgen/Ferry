@@ -1,0 +1,59 @@
+import { parseJsonOrThrow } from "./http";
+
+/** Browser-side calls into Ferry's `/api/sep31/*` orchestrator routes. */
+
+export interface Sep31TransactionResult {
+  id: string;
+  stellar_account_id?: string;
+  stellar_memo_type?: string;
+  stellar_memo?: string;
+  [key: string]: unknown;
+}
+
+export interface Sep31TransactionStatus {
+  id: string;
+  status: string;
+  stellar_transaction_id?: string;
+  payout_stellar_transaction_id?: string;
+  [key: string]: unknown;
+}
+
+export async function createSep31Transaction(
+  domain: string,
+  token: string,
+  params: {
+    amount: string;
+    asset_code: string;
+    quote_id?: string;
+    funding_method?: string;
+    fields?: Record<string, unknown>;
+  },
+  options: { idempotencyKey?: string } = {}
+): Promise<Sep31TransactionResult> {
+  const res = await fetch("/api/sep31/transactions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(options.idempotencyKey ? { "Idempotency-Key": options.idempotencyKey } : {}),
+    },
+    body: JSON.stringify({ domain, token, ...params }),
+  });
+  return parseJsonOrThrow<Sep31TransactionResult>(res);
+}
+
+/**
+ * Polls a previously-created SEP-31 transaction's status — the piece that
+ * was missing: `Sep31Panel.send()` used to set `transferStatus` once
+ * (optimistically, right after creation) and never again, so a transfer
+ * that genuinely completed on the anchor's side never made the status
+ * tracker's final step go green.
+ */
+export async function fetchSep31Transaction(domain: string, token: string, id: string): Promise<Sep31TransactionStatus> {
+  const query = new URLSearchParams({ domain, token, id });
+  const res = await fetch(`/api/sep31/transactions?${query.toString()}`);
+  const body = await parseJsonOrThrow<Record<string, unknown>>(res);
+  // Anchors vary on whether GET /transactions/:id wraps the object in a
+  // `transaction` key (SEP-31 doesn't mandate one shape here) — handle both.
+  const transaction = "transaction" in body ? body.transaction : body;
+  return transaction as Sep31TransactionStatus;
+}
