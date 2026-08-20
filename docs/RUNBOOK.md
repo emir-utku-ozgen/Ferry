@@ -48,6 +48,44 @@ Full detail — what the mock anchor does and doesn't implement, why it exists i
 5. Smoke-test SEP-10 challenge/token issuance and a SEP-38 indicative price request against the real anchor before directing any real traffic at the deployment (mirrors the manual verification already on record for Testnet in `TESTNET_HASHES.md` — there is no automated smoke test yet; see `GO_LIVE_CHECKLIST.md` item 8).
 6. There is intentionally no single "network mode" flag — Testnet vs. Mainnet is entirely a function of which values these six variables hold. This keeps the application code identical between environments (no `if (mainnet)` branches to audit), at the cost of the switch being "get every variable right" rather than "flip one flag." A misconfigured single variable (e.g. Mainnet Horizon URL with a Testnet network passphrase) fails loudly — Horizon rejects transactions signed for the wrong network — rather than silently mixing networks.
 
+### 2.2 Public Testnet deployment (SOW Deliverable 3 evidence: "publicly accessible Testnet web demo")
+
+Two separate services, two separate hosts — they have different runtime requirements and neither should be forced onto the other's platform:
+
+| Service | Host | Why this host |
+|---|---|---|
+| Ferry (Next.js app) | **Vercel** | Native fit for Next.js; stateless request/response, no background process needed. |
+| `mock-anchor/` (Express) | **Render or Railway** (not Vercel) | It holds in-memory state (customers/quotes/transactions `Map`s) and runs a `setInterval` payment poller every 5s — both need a long-lived process. Vercel's serverless functions are ephemeral per-request and don't support either; deploying `mock-anchor/` there would silently lose all state between requests and the poller would never run. Render/Railway both run it as a persistent Node process, matching `npm start`. |
+
+**Deploy `mock-anchor/` first** (Ferry's env vars depend on knowing its final domain):
+
+1. Push `mock-anchor/` as its own service (Render: "New Web Service" pointed at this repo with root directory `mock-anchor/`; Railway: same, or `railway up` from within `mock-anchor/`). Build command: `npm install`. Start command: `npm start`.
+2. Set these env vars on the host (do **not** set `PORT` — both platforms inject it, and `server.js` already reads `process.env.PORT`):
+   | Var | Value |
+   |---|---|
+   | `HOME_DOMAIN` | the hostname the platform assigns, e.g. `ferry-mock-anchor.onrender.com` — **no scheme, no port** |
+   | `SIGNING_SECRET` | a pinned Testnet secret key (generate once locally via `node -e "console.log(require('@stellar/stellar-sdk').Keypair.random().secret())"`, fund it via Friendbot, then pin it here — leaving this unset works but rotates the anchor's identity on every redeploy, which breaks any client that cached the old `stellar.toml`) |
+   | `TRY_ISSUER_SECRET` | same idea, a second pinned keypair |
+   | `JWT_SECRET` | any random string — rotate on redeploy is fine, it only invalidates outstanding SEP-10 sessions |
+   | `MOCK_PAYOUT_DEMO_ACCOUNT` | optional, only if you want the demo TRY payout leg |
+3. Confirm `GET https://<that-domain>/health` returns `{"ok":true,...}` and `GET https://<that-domain>/.well-known/stellar.toml` shows `https://` endpoints (the fix in this session's `server.js` makes this automatic — it only uses `http://` for `localhost`/`127.0.0.1`, matching `lib/stellar/toml.ts`'s own rule exactly).
+
+**Then deploy Ferry to Vercel:**
+
+1. Import the repo in Vercel (framework preset: Next.js — zero extra build config needed, `next.config.ts` has no custom settings to carry over).
+2. Set these Project → Environment Variables (Production, or a Preview environment if you want a non-production URL first):
+   | Var | Value |
+   |---|---|
+   | `NEXT_PUBLIC_HORIZON_URL` | `https://horizon-testnet.stellar.org` |
+   | `NEXT_PUBLIC_NETWORK_PASSPHRASE` | `Test SDF Network ; September 2015` |
+   | `NEXT_PUBLIC_HOME_DOMAIN` | the Vercel domain Ferry itself will be served from, e.g. `ferry-demo.vercel.app` — must match exactly, it's sent as SEP-10's `home_domain` |
+   | `NEXT_PUBLIC_ANCHOR_DOMAIN` | the `mock-anchor/` domain from above, e.g. `ferry-mock-anchor.onrender.com` |
+   | `ANCHOR_ALLOWLIST` | same value as `NEXT_PUBLIC_ANCHOR_DOMAIN` (server-only var — this is the one the code actually reads; an env named `NEXT_PUBLIC_ANCHOR_ALLOWLIST` does **not** exist in the codebase and is a no-op if set) |
+   | `NEXT_PUBLIC_APP_URL` | `https://ferry-demo.vercel.app` (full URL, with scheme) |
+   `NEXT_PUBLIC_EURC_ISSUER` / `NEXT_PUBLIC_MOCK_TRY_ISSUER` can stay unset — Ferry discovers both from the anchor's own `stellar.toml` at request time (`mock-anchor/README.md`); only set them if you need to override the default.
+3. Deploy. Smoke-test the same way as §2.1 item 5: SEP-10 challenge, then a SEP-38 price request, against the live URL before sharing it.
+4. **Freighter itself needs no config change** — it's a browser extension the visitor already has, pointed at Testnet on their end; Ferry's `WalletConnect.tsx` only checks that Freighter's active network matches `NEXT_PUBLIC_NETWORK_PASSPHRASE` (fixed this session — see `GAP_ANALYSIS.md`'s P1-3).
+
 ## 3. What's true today (facts derivable from the codebase)
 
 - **No custody.** Ferry holds no funds and no private keys (`GAP_ANALYSIS.md` §3; `KEY_MANAGEMENT.md` §1) — there is no "Ferry wallet" to fund, monitor, or protect.
