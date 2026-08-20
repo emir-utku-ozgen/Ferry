@@ -1,6 +1,6 @@
 # Ferry — Testnet Transaction Evidence
 
-**Status:** Genuine, live evidence only. §1–§7 came from a real run against Stellar Testnet and the public reference anchor (`testanchor.stellar.org`) on 2026-08-13, executed through Ferry's own `/api/*` orchestrator routes exactly as the browser UI calls them. §8 is a second run (2026-08-16) against Ferry's own mock anchor (`mock-anchor/`) for the EUR(EURC)→TRY corridor, held to the same standard — §8.2–§8.3 record the SEP-10/38/12/31 chain plus the EURC-funding blocker as it stood earlier that day; §8.4, later the same day, records the payment itself actually landing and the transfer genuinely reaching `completed` — Ferry's first fully on-chain-settled transfer on record. Nothing in this document is simulated or invented.
+**Status:** Genuine, live evidence only. §1–§7 came from a real run against Stellar Testnet and the public reference anchor (`testanchor.stellar.org`) on 2026-08-13, executed through Ferry's own `/api/*` orchestrator routes exactly as the browser UI calls them. §8 is a second run (2026-08-16) against Ferry's own mock anchor (`mock-anchor/`) for the EUR(EURC)→TRY corridor, held to the same standard — §8.2–§8.3 record the SEP-10/38/12/31 chain plus the EURC-funding blocker as it stood earlier that day; §8.4, later the same day, records the payment itself actually landing and the transfer genuinely reaching `completed` — Ferry's first fully on-chain-settled transfer on record. §9 is a third run (2026-08-20) verifying that session's P0-1/P0-3 correctness fixes — a genuine anchor-side expired-quote rejection (previously unreproducible against any available anchor) plus the full anchor-rejection failure matrix; the on-chain underpayment/full-payment leg for P0-1 specifically remains blocked on EURC acquisition, stated plainly in §9.6. Nothing in this document is simulated or invented.
 
 Where a requested scenario **could not** be genuinely reproduced, that is stated explicitly, with the reason, rather than filled in with a plausible-looking fake result. See §"Failure scenarios" below §7, and §8.3 for the (since-resolved) EURC-funding blocker specifically.
 
@@ -167,6 +167,70 @@ The repo owner obtained real Testnet EURC in their own wallet from Circle's publ
 
 ---
 
+## 9. P0/P1 Fix-Verification Run (2026-08-20) — mock anchor
+
+Run against Ferry's own mock anchor (`mock-anchor/`, `localhost:4001`), through Ferry's real `/api/*` routes, specifically to capture live evidence for the two P0 correctness fixes made this session: (P0-1) the payment-matching poller now requires the cumulative amount received under a memo to cover the invoiced amount before marking a transaction `completed` (previously matched on memo alone); (P0-3) `POST /sep31/transactions` now rejects an expired `quote_id` server-side (previously never enforced by any anchor Ferry had access to). Same standard as §1–§8: real, dated, sourced, nothing invented; where a step is genuinely blocked, that's stated plainly below rather than filled in.
+
+### 9.1 Test account
+
+```
+Account:   GBNQZLNULTC4Z7TBOIK2CKNZFNFAW7K3HXIXLBDWJKQDI675YYV6TOTW
+Funded:    via Friendbot
+Tx hash:   06b5792890772f038489426526c331fec36afd575a1135bddc71506800cd716a
+```
+
+Generated and signed by script (not Freighter) for this evidence run — same pattern as §1's "Freighter-equivalent keypair," secret held only locally, Testnet-only, zero value.
+
+### 9.2 EURC trustline
+
+```
+Tx hash:   bb65051823110659fe4c9b67c664ea4e30c035349cf650ed9b9b3073377b891b
+```
+
+### 9.3 SEP-10 → SEP-38 → SEP-12, live through Ferry's own code
+
+- **SEP-10**: real challenge issued by `localhost:4001`, signed locally, exchanged via `POST /api/sep10/token` for a valid JWT.
+- **SEP-38 firm quote**: `POST /api/sep38/quote`, `sell_asset=stellar:EURC:GB3Q6QDZYTHWT7E5PVS3W7FUT5GVAFC5KSZFFLPU25GO7VTC3NM2ZTVO`, `buy_asset=stellar:TRY:GADBO465IHRW3WNOCNM7H5UEXKER4TGT2FSBYUDHMKFOAYR2YHAQ72FZ`, `sell_amount=10`:
+  ```
+  Quote ID:    mockq_mt1mdkc0f63e
+  Buy (net):   442.7750000 TRY
+  Fee:         0.05 EURC
+  Expires at:  2026-08-20T14:37:28.464Z
+  ```
+- **SEP-12**: `GET` → `NEEDS_INFO`; `PUT {first_name: "Ada", last_name: "Lovelace", email_address: "ada@example.com"}` → re-queried status **`ACCEPTED`**.
+
+### 9.4 Failure matrix — anchor-side rejections, all genuine, all via Ferry's own `/api/sep31/transactions`
+
+| # | Scenario | Request | Anchor response | Funds sent | Fix verified |
+|---|---|---|---|:---:|---|
+| 1 | Unsupported asset | `asset_code=USDC` | `400 {"error":"Asset [USDC] not supported by this mock anchor — only EURC"}` | None | — |
+| 2 | Amount too large | `amount=5000` | `400 {"error":"too_large","message":"amount must be between 0.0001 and 1000 EURC"}` | None | — |
+| 3 | Amount too small | `amount=0.00001` | `400 {"error":"too_small","message":"amount must be between 0.0001 and 1000 EURC"}` | None | — |
+| 4 | **Expired quote (anchor-side)** | `quote_id=mockq_mt1mdkc0f63e`, submitted at `2026-08-20T14:37:38Z` — 10s after its real `2026-08-20T14:37:28.464Z` expiry | `400 {"error":"quote_expired","message":"Quote mockq_mt1mdkc0f63e expired at 2026-08-20T14:37:28.464Z — request a fresh quote before creating a transaction"}` | None | **P0-3** — this exact scenario was listed below (pre-fix) as "not genuinely reproducible against this anchor." It now is, against a different anchor Ferry controls. |
+
+Invalid IBAN and failed-KYC remain not reproducible against *this* anchor either, for the same structural reason as §1–§7's run — see the table below, now spanning both anchors.
+
+### 9.5 SEP-31 transaction created, pending on-chain settlement
+
+```
+Transaction ID:      3yx5ul97
+stellar_account_id:  GBDODNXHPROEII5UX3T23GOLDD53XMDQHNLDXEFHIL2CIPPXFHXTGHAF
+stellar_memo:        3yx5ul97
+Required amount:     10 EURC
+```
+
+### 9.6 What was NOT completed, and exactly why
+
+**The underpayment and full-payment on-chain legs — the direct P0-1 evidence — are blocked, for the same class of reason §8.3 documented, not a new one.** Acquiring fresh Testnet EURC for this run hit every constraint §8.3 already found, plus one more:
+
+1. Circle's public web faucet (`faucet.circle.com`) hit a browser rate limit on retry.
+2. Circle's programmatic faucet API requires Mainnet-verified Circle credentials this environment doesn't have (unchanged from §8.3).
+3. **DEX acquisition, checked directly against Horizon at time of writing**: querying the order book in the correct direction (offers *selling* EURC for XLM: `selling_asset=EURC, buying_asset=native`) returns `"asks": []` — zero sellers at any price. The single resting offer visible from the opposite query direction is a *buyer* of EURC, not a seller, and doesn't help. Total liquidity-pool depth remains under 0.04 EURC (`GET /liquidity_pools?reserves=EURC:...`). This is not a pricing problem to work around — there is no path to acquire EURC via the Testnet DEX at all, at any price, right now.
+
+**What this means**: 9.1–9.5 above are genuine, on-chain-verifiable evidence for the P0-3 fix and the full anchor-rejection failure matrix. The P0-1 amount-verification fix has direct proof today only from the unit tests (`mock-anchor/settlement.test.js`, 10/10 passing, including the exact 0.0009/10 EURC case from §8.4) — not yet from a second live on-chain run. Closing this specific gap needs either a successful Circle faucet retry (after its rate-limit window) or a direct transfer from an account that already holds Testnet EURC (e.g. §8.4's sender, if the repo owner still controls it) — both require a human with a funded wallet, the same constraint §8.3 hit originally.
+
+---
+
 ## Failure scenarios requested but not genuinely reproducible against this anchor
 
 Being direct about this rather than inventing results:
@@ -175,7 +239,7 @@ Being direct about this rather than inventing results:
 |---|---|---|
 | **Failed KYC** | Not reproducible | Submitted deliberately malformed data (empty `first_name`/`last_name`, invalid email format) — the reference anchor performed no field-level validation and returned `ACCEPTED` anyway. This anchor's SEP-12 implementation is a minimal demo; it doesn't reject on data quality. |
 | **Invalid IBAN** | Not reproducible | Ferry has no client-side IBAN format validator (not yet built), and this anchor's `bank_account_number` field is an unvalidated free-text string — it accepts any value. Reproducing this scenario requires either building IBAN format validation into Ferry itself, or testing against an anchor with real bank-detail validation. |
-| **Expired quote, rejected by the anchor** | Not reproducible | Requested `expire_after` in the past; the anchor ignored the parameter and always returns the same fixed `2026-08-14T12:00:00Z` cutoff. Ferry's own client-side guard (blocking submission once `Date.now() >= expires_at`) is real and tested — see `components/QuoteCalculator.tsx` / `components/TransferPanel.tsx` — but a genuine anchor-side rejection of an expired `quote_id` could not be triggered against this instance. |
+| **Expired quote, rejected by the anchor** | ~~Not reproducible~~ **Closed, against a different anchor — see §9.4 row 4** | True against *this* anchor (`testanchor.stellar.org`): it ignores `expire_after` and always returns the same fixed `2026-08-14T12:00:00Z` cutoff. Ferry's mock anchor (`mock-anchor/`) was fixed on 2026-08-20 to enforce `expires_at` server-side, and a genuine anchor-side `quote_expired` rejection is now on record in §9.4. |
 | **Refund** | Not attempted | Requires a human to complete the anchor's hosted SEP-24 form (§5) and the anchor to subsequently reverse a completed transaction — both outside what's automatable via API calls alone. |
 
 **What this means in practice:** Ferry's request/response plumbing, error typing, and client-side guardrails (quote expiry, trustline pre-flight) are real and verified end-to-end. The specific business-rule rejections above depend on anchor-side behavior that the public Stellar reference anchor doesn't implement strictly enough to exercise. A production pilot anchor with real KYC/IBAN validation would be needed to capture genuine evidence for those rows — and that evidence should be gathered the same way this document was: by actually running the transactions, not writing plausible outcomes.
