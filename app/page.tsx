@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useReducer, useState } from "react";
 import WalletConnect from "@/components/WalletConnect";
 import RemittanceFlow from "@/components/RemittanceFlow";
 import QuoteCalculator from "@/components/QuoteCalculator";
@@ -11,24 +11,36 @@ import NonCustodialNotice from "@/components/NonCustodialNotice";
 import { ANCHOR_DOMAIN } from "@/lib/stellar/config";
 import type { FirmQuote } from "@/lib/stellar/client/sep38Client";
 import { fetchCustomerInfo } from "@/lib/stellar/client/sep12Client";
+import { initialTransferState, transferReducer } from "@/lib/transferMachine";
 
 export default function Home() {
   const [publicKey, setPublicKey] = useState<string | null>(null);
-  const [sep10Token, setSep10Token] = useState<string | null>(null);
-  const [lockedQuote, setLockedQuote] = useState<FirmQuote | null>(null);
-  const [kycStatus, setKycStatus] = useState<KycStatus>("not_started");
+  const [transfer, dispatch] = useReducer(transferReducer, initialTransferState);
+  const { sep10Token, lockedQuote, kycStatus, transferStatus, flowError } = transfer;
   const [kycModalOpen, setKycModalOpen] = useState(false);
-  const [transferStatus, setTransferStatus] = useState<string | null>(null);
-  const [flowError, setFlowError] = useState<FlowError | null>(null);
   const [now, setNow] = useState(() => Date.now());
 
+  // Thin dispatch wrappers matching each child component's existing
+  // callback prop signature exactly, so none of them need to change.
+  function setSep10Token(token: string) {
+    dispatch({ type: "AUTHENTICATED", token });
+  }
+  function setLockedQuote(quote: FirmQuote) {
+    dispatch({ type: "QUOTE_LOCKED", quote });
+  }
+  function setKycStatus(status: KycStatus) {
+    dispatch({ type: "KYC_STATUS_CHANGED", status });
+  }
+  function setTransferStatus(status: string | null) {
+    dispatch({ type: "TRANSFER_STATUS_CHANGED", status });
+  }
+  function setFlowError(error: FlowError | null) {
+    dispatch(error ? { type: "FLOW_ERROR_RAISED", error } : { type: "FLOW_ERROR_DISMISSED" });
+  }
+
   function resetSession() {
-    setSep10Token(null);
-    setLockedQuote(null);
-    setKycStatus("not_started");
+    dispatch({ type: "SESSION_RESET" });
     setKycModalOpen(false);
-    setTransferStatus(null);
-    setFlowError(null);
   }
 
   // Fired on initial connect AND on a live account switch inside Freighter
