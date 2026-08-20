@@ -27,6 +27,7 @@ const {
   Memo,
   WebAuth,
 } = require("@stellar/stellar-sdk");
+const { isQuoteExpired, sumPaymentAmounts, isSettlementSufficient } = require("./settlement");
 
 const PORT = Number(process.env.PORT || 4001);
 const HOME_DOMAIN = process.env.HOME_DOMAIN || `localhost:${PORT}`;
@@ -154,15 +155,27 @@ async function main() {
   const app = express();
   app.use(express.json());
 
+  // Mirrors lib/stellar/toml.ts's own isLocalAnchorDomain() exactly: Ferry
+  // refuses plain HTTP for any anchor domain except localhost/127.0.0.1 (no
+  // TLS cert of its own). Advertising http:// endpoints from a real public
+  // deployment (Render/Railway/etc., which terminate HTTPS at the edge)
+  // would mismatch that rule — the toml itself is fetchable over HTTPS,
+  // but the endpoints it lists inside would still say http://, which
+  // depends on an edge redirect happening to paper over the mismatch
+  // rather than being correct by construction.
+  const homeDomainHost = HOME_DOMAIN.split(":")[0].toLowerCase();
+  const isLocalHomeDomain = homeDomainHost === "localhost" || homeDomainHost === "127.0.0.1";
+  const SCHEME = isLocalHomeDomain ? "http" : "https";
+
   // ---- SEP-1: stellar.toml ----
   app.get("/.well-known/stellar.toml", (req, res) => {
     res.type("text/plain").send(`VERSION="2.7.0"
 NETWORK_PASSPHRASE="${NETWORK_PASSPHRASE}"
 SIGNING_KEY="${signingKeypair.publicKey()}"
-WEB_AUTH_ENDPOINT="http://${HOME_DOMAIN}/auth"
-DIRECT_PAYMENT_SERVER="http://${HOME_DOMAIN}/sep31"
-ANCHOR_QUOTE_SERVER="http://${HOME_DOMAIN}/sep38"
-KYC_SERVER="http://${HOME_DOMAIN}/sep12"
+WEB_AUTH_ENDPOINT="${SCHEME}://${HOME_DOMAIN}/auth"
+DIRECT_PAYMENT_SERVER="${SCHEME}://${HOME_DOMAIN}/sep31"
+ANCHOR_QUOTE_SERVER="${SCHEME}://${HOME_DOMAIN}/sep38"
+KYC_SERVER="${SCHEME}://${HOME_DOMAIN}/sep12"
 
 [DOCUMENTATION]
 ORG_NAME="Ferry mock anchor (local test harness)"
@@ -335,6 +348,15 @@ desc="MOCK / SIMULATED representation of Turkish Lira. Not backed by any bank, n
       return res.status(400).json({ error: "Sender KYC not accepted — complete SEP-12 first" });
     }
     const quote = quote_id ? quotes.get(quote_id) : null;
+    if (quote_id && !quote) {
+      return res.status(400).json({ error: "quote_id not found or already expired from this mock anchor's memory" });
+    }
+    if (quote && isQuoteExpired(quote)) {
+      return res.status(400).json({
+        error: "quote_expired",
+        message: `Quote ${quote.id} expired at ${quote.expires_at} — request a fresh quote before creating a transaction`,
+      });
+    }
     // A quote already carries a validated sell_amount (checked at
     // /sep38/quote time); a raw `amount` with no quote_id hasn't been
     // checked yet, so validate it here too rather than trusting the caller.
@@ -396,22 +418,50 @@ desc="MOCK / SIMULATED representation of Turkish Lira. Not backed by any bank, n
         .limit(20)
         .call();
       for (const tx of pending) {
-        const match = payments.records.find(
+        const candidates = payments.records.filter(
           (p) =>
             p.type === "payment" &&
             p.to === signingKeypair.publicKey() &&
             p.asset_code === "EURC" &&
             p.asset_issuer === EURC_ISSUER
         );
-        if (!match) continue;
+        if (candidates.length === 0) continue;
+
         // Text memo isn't on the payment operation record itself — fetch
-        // the parent transaction to check it actually targets this tx id.
-        const parentTx = await match.transaction();
-        if (parentTx.memo !== tx.id) continue;
+        // each candidate's parent transaction to find every payment that
+        // actually targets this tx id (there can be more than one, e.g. a
+        // sender topping up an initial short payment with the same memo).
+        const matches = [];
+        for (const candidate of candidates) {
+          const parentTx = await candidate.transaction();
+          if (parentTx.memo === tx.id) matches.push(candidate);
+        }
+        if (matches.length === 0) continue;
+
+        const receivedAmount = sumPaymentAmounts(matches);
+        tx.received_amount = receivedAmount.toFixed(7);
+        tx.stellar_transaction_id = matches[matches.length - 1].transaction_hash;
+
+        // Require the cumulative amount received under this memo to cover
+        // the invoiced amount before reporting the transfer as settled — a
+        // payment that matches on memo but falls short must not be marked
+        // "completed". (Found live: TESTNET_HASHES.md §8.4 recorded a
+        // transaction as "completed" after a payment of 0.0009 EURC against
+        // a 10 EURC quote — this check is exactly what was missing.)
+        const required = Number(tx.amount);
+        if (!isSettlementSufficient(receivedAmount, required)) {
+          console.warn(
+            `[mock-anchor] transaction ${tx.id}: received ${receivedAmount.toFixed(7)} EURC so far, ` +
+              `short of the invoiced ${required.toFixed(7)} EURC — leaving pending_receiver, not completing.`
+          );
+          continue;
+        }
 
         tx.status = "completed";
-        tx.stellar_transaction_id = match.transaction_hash;
-        console.log(`[mock-anchor] transaction ${tx.id} matched EURC payment ${match.transaction_hash}`);
+        console.log(
+          `[mock-anchor] transaction ${tx.id} settled: received ${receivedAmount.toFixed(7)} EURC ` +
+            `(>= ${required.toFixed(7)} required) via ${tx.stellar_transaction_id}`
+        );
 
         if (payoutDemoAccount) {
           try {
