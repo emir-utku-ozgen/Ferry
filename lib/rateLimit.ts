@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { recordFailure } from "@/lib/monitoring";
 
 /**
  * In-memory rate limiting for Ferry's anchor-facing orchestrator routes
@@ -24,6 +25,8 @@ export interface RateLimitResult {
   remaining: number;
   /** Epoch ms at which the current window resets. */
   resetAt: number;
+  /** The route name this result was checked against — read by rateLimitResponse() for alerting. */
+  route: string;
 }
 
 const DEFAULT_LIMIT = 10;
@@ -73,19 +76,20 @@ export function checkRateLimit(
   if (!existing || existing.resetAt <= now) {
     const resetAt = now + windowMs;
     buckets.set(key, { count: 1, resetAt });
-    return { allowed: true, limit, remaining: limit - 1, resetAt };
+    return { allowed: true, limit, remaining: limit - 1, resetAt, route: routeName };
   }
 
   if (existing.count >= limit) {
-    return { allowed: false, limit, remaining: 0, resetAt: existing.resetAt };
+    return { allowed: false, limit, remaining: 0, resetAt: existing.resetAt, route: routeName };
   }
 
   existing.count += 1;
-  return { allowed: true, limit, remaining: limit - existing.count, resetAt: existing.resetAt };
+  return { allowed: true, limit, remaining: limit - existing.count, resetAt: existing.resetAt, route: routeName };
 }
 
 /** Builds the 429 response for a request rejected by `checkRateLimit`. */
 export function rateLimitResponse(result: RateLimitResult): NextResponse {
+  recordFailure(result.route, "RATE_LIMITED");
   const retryAfterSeconds = Math.max(1, Math.ceil((result.resetAt - Date.now()) / 1000));
   return NextResponse.json(
     {

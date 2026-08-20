@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getIdempotentResponse, storeIdempotentResponse } from "@/lib/idempotency";
 import { logger } from "@/lib/logger";
 import { recordAuditEvent } from "@/lib/auditTrail";
+import { recordFailure } from "@/lib/monitoring";
 
 export interface RouteResult {
   status: number;
@@ -46,6 +47,9 @@ export async function withInstrumentation(
   logger.info({ route: routeName, event, transferId, status: result.status, code: bodyCode, durationMs });
   if (transferId) {
     recordAuditEvent(transferId, event, { status: String(result.status), code: bodyCode });
+  }
+  if (result.status >= 400) {
+    recordFailure(routeName, bodyCode);
   }
 
   if (cacheKey) storeIdempotentResponse(cacheKey, result.status, result.body);
