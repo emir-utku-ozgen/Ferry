@@ -19,6 +19,7 @@ import {
 import type { FirmQuote } from "@/lib/stellar/client/sep38Client";
 import { NETWORK_PASSPHRASE } from "@/lib/stellar/config";
 import { buildChangeTrustXdr, describeLowReserveError, hasTrustline, submitSignedTransaction } from "@/lib/stellar/trustline";
+import { buildSep31PaymentXdr } from "@/lib/stellar/payment";
 import { freighterErrorMessage } from "@/lib/stellar/freighterError";
 import { ApiError } from "@/lib/stellar/client/http";
 import type { FlowError, KycStatus } from "@/components/StatusTracker";
@@ -60,6 +61,12 @@ const TERMINAL_STATUSES = new Set([
 // different input, which wouldn't change anything here.
 const ANCHOR_ASSET_CONFIG_PATTERN = /has no fields definition|asset .* not (found|supported)/i;
 
+// An anchor-side rejection of an already-expired quote_id at SEP-31 create
+// time (as opposed to Ferry's own client-side pre-flight block) — distinct
+// from a generic anchor_rejected so it renders the quote_expired screen
+// (with its "lock a fresh quote" action) instead of a dead-end rejection.
+const ANCHOR_QUOTE_EXPIRED_PATTERN = /quote_expired|quote .* expired/i;
+
 interface BaseTransferProps {
   anchorDomain: string;
   publicKey: string;
@@ -84,9 +91,12 @@ function buyAssetLabel(asset: string): string {
 }
 
 /** Classifies a caught error into the FlowError shape StatusTracker renders a dedicated screen for. */
-function classifyTransferError(err: unknown): FlowError {
+export function classifyTransferError(err: unknown): FlowError {
   const message = err instanceof Error ? err.message : "Transfer failed";
   if (err instanceof ApiError && err.code === "ANCHOR_REJECTED") {
+    if (ANCHOR_QUOTE_EXPIRED_PATTERN.test(message)) {
+      return { type: "quote_expired", message };
+    }
     if (ANCHOR_ASSET_CONFIG_PATTERN.test(message)) {
       return { type: "anchor_rejected", message: `Anchor cannot settle this asset automatically: ${message}` };
     }
@@ -422,6 +432,16 @@ function Sep31Panel({ anchorDomain, publicKey, token, lockedQuote, kycStatus, on
   const [linkCopied, setLinkCopied] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // The one-click settlement payment — closes the gap where the sender
+  // previously had to copy `result.stellar_account_id`/`stellar_memo` into
+  // an external wallet by hand (SOW: "neither side touches crypto").
+  const [trustlineStatus, setTrustlineStatus] = useState<TrustlineStatus>("unknown");
+  const [trustlineError, setTrustlineError] = useState<string | null>(null);
+  const [establishingTrustline, setEstablishingTrustline] = useState(false);
+  const [paying, setPaying] = useState(false);
+  const [paymentError, setPaymentError] = useState<string | null>(null);
+  const [paymentTxHash, setPaymentTxHash] = useState<string | null>(null);
+
   useEffect(() => {
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
@@ -460,6 +480,104 @@ function Sep31Panel({ anchorDomain, publicKey, token, lockedQuote, kycStatus, on
   const quoteExpired = lockedQuote ? now >= new Date(lockedQuote.expires_at).getTime() : false;
   const kycRequired = kycStatus !== "ACCEPTED";
 
+  const paymentAssetIssuer = issuerForAssetCode(assetCode);
+  const trustlineRequiredForPayment = assetCode !== "native" && paymentAssetIssuer !== null;
+
+  // Pre-flight check (same reasoning as Sep24Panel's, GAP_ANALYSIS.md §4.3):
+  // once a transaction is created, verify the sender's own account already
+  // trusts the settlement asset before offering the "Pay" button — otherwise
+  // the payment would fail with `op_no_trust` only after the sender already
+  // clicked pay. Runs once `result` exists, not before (no point checking
+  // ahead of having anything to pay).
+  useEffect(() => {
+    if (!result || !trustlineRequiredForPayment || !paymentAssetIssuer) return;
+    let cancelled = false;
+    Promise.resolve().then(() => {
+      if (!cancelled) {
+        setTrustlineStatus("checking");
+        setTrustlineError(null);
+      }
+    });
+    (async () => {
+      const exists = await hasTrustline(publicKey, assetCode, paymentAssetIssuer).catch((err) => {
+        if (!cancelled) {
+          setTrustlineStatus("error");
+          setTrustlineError(err instanceof Error ? err.message : "Failed to check trustline status");
+        }
+        return null;
+      });
+      if (!cancelled && exists !== null) setTrustlineStatus(exists ? "present" : "missing");
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [result, trustlineRequiredForPayment, paymentAssetIssuer, assetCode, publicKey]);
+
+  async function establishTrustline() {
+    if (!paymentAssetIssuer) return;
+    setEstablishingTrustline(true);
+    setTrustlineError(null);
+    try {
+      const xdr = await buildChangeTrustXdr(publicKey, assetCode, paymentAssetIssuer);
+      const signed = await signTransaction(xdr, { networkPassphrase: NETWORK_PASSPHRASE, address: publicKey });
+      if (signed.error) {
+        throw new Error(freighterErrorMessage(signed.error, "Freighter declined to sign the trustline transaction"));
+      }
+      await submitSignedTransaction(signed.signedTxXdr);
+      setTrustlineStatus("present");
+    } catch (err) {
+      if (err instanceof NotFoundError) {
+        setTrustlineError("This account doesn't exist on Testnet yet. Fund it via Friendbot, then try again.");
+      } else {
+        setTrustlineError(describeLowReserveError(err) ?? (err instanceof Error ? err.message : "Failed to establish trustline"));
+      }
+    } finally {
+      setEstablishingTrustline(false);
+    }
+  }
+
+  /**
+   * The 1-click settlement payment: builds the SEP-31 payment transaction
+   * to `result.stellar_account_id` with `result.stellar_memo`, requests a
+   * Freighter signature, and submits it to Horizon directly — no external
+   * wallet UI, no manual address/memo entry. `onTransferStatusChange` is
+   * nudged to "pending_receiver" immediately so the tracker doesn't sit on
+   * its pre-payment state for a full poll cycle; the anchor's own poller
+   * (already running via startPolling from send()) remains the source of
+   * truth for when it actually flips to "completed".
+   */
+  async function payNow() {
+    if (!result?.stellar_account_id) return;
+    setPaying(true);
+    setPaymentError(null);
+    try {
+      const xdr = await buildSep31PaymentXdr(
+        publicKey,
+        result.stellar_account_id,
+        assetCode,
+        paymentAssetIssuer,
+        amount,
+        result.stellar_memo,
+        result.stellar_memo_type
+      );
+      const signed = await signTransaction(xdr, { networkPassphrase: NETWORK_PASSPHRASE, address: publicKey });
+      if (signed.error) {
+        throw new Error(freighterErrorMessage(signed.error, "Freighter declined to sign the payment"));
+      }
+      const submitted = await submitSignedTransaction(signed.signedTxXdr);
+      setPaymentTxHash(submitted.hash);
+      onTransferStatusChange("pending_receiver");
+    } catch (err) {
+      if (err instanceof NotFoundError) {
+        setPaymentError("This account doesn't exist on Testnet yet. Fund it via Friendbot, then try again.");
+      } else {
+        setPaymentError(describeLowReserveError(err) ?? (err instanceof Error ? err.message : "Failed to submit payment"));
+      }
+    } finally {
+      setPaying(false);
+    }
+  }
+
   function recipientLink(): string | null {
     if (!lockedQuote || typeof window === "undefined") return null;
     const url = new URL(`/claim/${lockedQuote.id}`, window.location.origin);
@@ -494,6 +612,10 @@ function Sep31Panel({ anchorDomain, publicKey, token, lockedQuote, kycStatus, on
     onFlowError(null);
     setResult(null);
     setStatus(null);
+    setTrustlineStatus("unknown");
+    setTrustlineError(null);
+    setPaymentError(null);
+    setPaymentTxHash(null);
     try {
       const tx = await createSep31Transaction(
         anchorDomain,
@@ -634,7 +756,7 @@ function Sep31Panel({ anchorDomain, publicKey, token, lockedQuote, kycStatus, on
           <p className="mt-1 font-mono">{result.id}</p>
           {result.stellar_account_id && (
             <p className="mt-1">
-              Send to <span className="font-mono text-emerald-300">{result.stellar_account_id}</span>
+              Settling to <span className="font-mono text-emerald-300">{result.stellar_account_id}</span>
               {result.stellar_memo && (
                 <>
                   {" "}
@@ -643,6 +765,59 @@ function Sep31Panel({ anchorDomain, publicKey, token, lockedQuote, kycStatus, on
               )}
             </p>
           )}
+        </div>
+      )}
+
+      {result && trustlineRequiredForPayment && trustlineStatus === "checking" && (
+        <p className="text-[11px] text-zinc-500">Checking whether this account trusts {assetCode}…</p>
+      )}
+
+      {result && trustlineRequiredForPayment && trustlineStatus === "missing" && (
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
+          <p className="text-xs font-semibold text-amber-300">Trustline required before paying</p>
+          <p className="mt-1 text-[11px] leading-relaxed text-amber-200/80">
+            This account has no trustline to {assetCode} yet. Establishing it only asks Freighter to sign a
+            <code className="mx-1 rounded bg-black/30 px-1 py-0.5 font-mono">ChangeTrust</code>
+            operation and does not move any funds.
+          </p>
+          <button
+            onClick={establishTrustline}
+            disabled={establishingTrustline}
+            className="mt-3 rounded-lg border border-amber-400/40 bg-amber-400/10 px-3 py-1.5 text-xs font-semibold text-amber-200 transition-colors hover:bg-amber-400/20 disabled:opacity-50"
+          >
+            {establishingTrustline ? "Waiting for Freighter signature…" : `Establish trustline for ${assetCode}`}
+          </button>
+        </div>
+      )}
+
+      {result && trustlineRequiredForPayment && trustlineStatus === "error" && trustlineError && (
+        <p className="text-xs text-red-400">Trustline check failed: {trustlineError}</p>
+      )}
+
+      {result && !paymentTxHash && (!trustlineRequiredForPayment || trustlineStatus === "present") && (
+        <button
+          onClick={payNow}
+          disabled={paying}
+          className="rounded-lg bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-black transition-colors hover:bg-emerald-400 disabled:opacity-50"
+        >
+          {paying ? "Waiting for Freighter signature…" : "Pay with Freighter"}
+        </button>
+      )}
+
+      {result && (
+        <p className="text-[11px] leading-relaxed text-zinc-600">
+          One click signs and submits the settlement payment straight from your connected wallet — the exact amount
+          and memo above, no copying addresses by hand.
+        </p>
+      )}
+
+      {paymentError && <p className="text-xs text-red-400">{paymentError}</p>}
+
+      {paymentTxHash && (
+        <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3 text-xs text-zinc-300">
+          <p className="font-semibold text-emerald-300">✓ Payment submitted from your wallet</p>
+          <p className="mt-1 break-all font-mono text-[11px] text-zinc-400">{paymentTxHash}</p>
+          <p className="mt-1 text-[11px] text-zinc-600">Waiting for the anchor to detect and confirm it below.</p>
         </div>
       )}
 
