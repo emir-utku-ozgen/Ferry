@@ -9,7 +9,9 @@ import {
   requestAccess,
   WatchWalletChanges,
 } from "@stellar/freighter-api";
+import { Networks } from "@stellar/stellar-sdk";
 import { freighterErrorMessage } from "@/lib/stellar/freighterError";
+import { NETWORK_PASSPHRASE } from "@/lib/stellar/config";
 
 interface WalletConnectProps {
   onConnect?: (publicKey: string) => void;
@@ -17,6 +19,21 @@ interface WalletConnectProps {
 }
 
 const WATCH_INTERVAL_MS = 3000;
+
+// Freighter reports the connected network as one of its own short labels
+// ("TESTNET", "PUBLIC", ...), not the full passphrase. Map Ferry's
+// configured NETWORK_PASSPHRASE (lib/stellar/config.ts — the single value
+// that actually changes at Mainnet cutover, per docs/RUNBOOK.md §2.1) to
+// the label Freighter is expected to report, instead of hardcoding
+// "TESTNET" here — a literal that would incorrectly reject a correctly
+// Mainnet-configured Freighter session once NETWORK_PASSPHRASE is switched.
+const FREIGHTER_NETWORK_LABELS: Record<string, string> = {
+  [Networks.PUBLIC]: "PUBLIC",
+  [Networks.TESTNET]: "TESTNET",
+  [Networks.FUTURENET]: "FUTURENET",
+  [Networks.STANDALONE]: "STANDALONE",
+};
+const EXPECTED_FREIGHTER_NETWORK = FREIGHTER_NETWORK_LABELS[NETWORK_PASSPHRASE] ?? null;
 
 /**
  * Connects to the user's Freighter wallet extension. Ferry never requests,
@@ -50,8 +67,11 @@ export default function WalletConnect({ onConnect, onDisconnect }: WalletConnect
       if (access.error) throw new Error(freighterErrorMessage(access.error, "Freighter declined the connection request"));
 
       const network = await getNetworkDetails();
-      if (!network.error && network.network && network.network !== "TESTNET") {
-        throw new Error(`Freighter is set to ${network.network}. Switch it to Testnet to use Ferry.`);
+      // If EXPECTED_FREIGHTER_NETWORK is null, NETWORK_PASSPHRASE is a
+      // custom/unrecognized value (e.g. a private network) — skip this
+      // check rather than guessing, instead of wrongly blocking it.
+      if (!network.error && network.network && EXPECTED_FREIGHTER_NETWORK && network.network !== EXPECTED_FREIGHTER_NETWORK) {
+        throw new Error(`Freighter is set to ${network.network}. Switch it to ${EXPECTED_FREIGHTER_NETWORK} to use Ferry.`);
       }
 
       setPublicKey(access.address);
