@@ -30,6 +30,7 @@ const {
 const { isQuoteExpired, sumPaymentAmounts, isSettlementSufficient } = require("./settlement");
 const { validateIban } = require("./iban");
 const { customerKey } = require("./customerKey");
+const { publicBaseUrl } = require("./publicBaseUrl");
 
 const PORT = Number(process.env.PORT || 4001);
 const HOME_DOMAIN = process.env.HOME_DOMAIN || `localhost:${PORT}`;
@@ -165,27 +166,21 @@ async function main() {
   const app = express();
   app.use(express.json());
 
-  // Mirrors lib/stellar/toml.ts's own isLocalAnchorDomain() exactly: Ferry
-  // refuses plain HTTP for any anchor domain except localhost/127.0.0.1 (no
-  // TLS cert of its own). Advertising http:// endpoints from a real public
-  // deployment (Render/Railway/etc., which terminate HTTPS at the edge)
-  // would mismatch that rule — the toml itself is fetchable over HTTPS,
-  // but the endpoints it lists inside would still say http://, which
-  // depends on an edge redirect happening to paper over the mismatch
-  // rather than being correct by construction.
-  const homeDomainHost = HOME_DOMAIN.split(":")[0].toLowerCase();
-  const isLocalHomeDomain = homeDomainHost === "localhost" || homeDomainHost === "127.0.0.1";
-  const SCHEME = isLocalHomeDomain ? "http" : "https";
-
   // ---- SEP-1: stellar.toml ----
+  // Endpoint URLs are derived per-request (publicBaseUrl) rather than
+  // from the static HOME_DOMAIN config value — see publicBaseUrl.js for
+  // why: HOME_DOMAIN silently defaulting to localhost:PORT on a real
+  // deployment is exactly what produced unreachable http://localhost:4001
+  // endpoints in a hosted stellar.toml.
   app.get("/.well-known/stellar.toml", (req, res) => {
+    const base = publicBaseUrl(req.headers, HOME_DOMAIN);
     res.type("text/plain").send(`VERSION="2.7.0"
 NETWORK_PASSPHRASE="${NETWORK_PASSPHRASE}"
 SIGNING_KEY="${signingKeypair.publicKey()}"
-WEB_AUTH_ENDPOINT="${SCHEME}://${HOME_DOMAIN}/auth"
-DIRECT_PAYMENT_SERVER="${SCHEME}://${HOME_DOMAIN}/sep31"
-ANCHOR_QUOTE_SERVER="${SCHEME}://${HOME_DOMAIN}/sep38"
-KYC_SERVER="${SCHEME}://${HOME_DOMAIN}/sep12"
+WEB_AUTH_ENDPOINT="${base}/auth"
+DIRECT_PAYMENT_SERVER="${base}/sep31"
+ANCHOR_QUOTE_SERVER="${base}/sep38"
+KYC_SERVER="${base}/sep12"
 
 [DOCUMENTATION]
 ORG_NAME="Ferry mock anchor (local test harness)"
