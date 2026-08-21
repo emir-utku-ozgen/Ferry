@@ -75,9 +75,15 @@ function resolveAssetValue(staticValue: string, currencies: AnchorCurrency[]): s
 // its own clear message instead of the anchor's raw JSON body.
 const UNSUPPORTED_ASSET_PATTERN = /sell_asset not found|buy_asset not found/i;
 
-function describeQuoteError(err: unknown, sellAsset: string, buyAsset: string): string {
+function describeQuoteError(err: unknown, sellAsset: string, buyAsset: string, anchorDomain: string): string {
   if (err instanceof ApiError && err.status === 404 && UNSUPPORTED_ASSET_PATTERN.test(err.message)) {
-    return `This anchor doesn't support ${currencyLabel(sellAsset)} → ${currencyLabel(buyAsset)} yet — no EUR/TRY-capable anchor is configured for this Testnet demo (see CORRIDOR_VERIFICATION.md). Try USD → USDC, USD → XLM, or USD → SRT instead to see a live quote today.`;
+    // Naming the actual configured anchor here is what makes this
+    // diagnosable from the UI alone: this message fires whenever *whatever
+    // anchor NEXT_PUBLIC_ANCHOR_DOMAIN currently points at* rejects the
+    // pair — which could mean the mock anchor (EURC/TRY-capable) simply
+    // isn't the anchor actually configured on this deployment, not that
+    // no anchor anywhere supports the pair.
+    return `"${anchorDomain}" doesn't support ${currencyLabel(sellAsset)} → ${currencyLabel(buyAsset)} yet (see CORRIDOR_VERIFICATION.md). If you expected the EUR/TRY-capable mock anchor here, check that NEXT_PUBLIC_ANCHOR_DOMAIN is actually pointed at it — this message means ${anchorDomain} itself doesn't advertise this pair, not that no anchor anywhere does. Try USD → USDC, USD → XLM, or USD → SRT instead to see a live quote against this anchor today.`;
   }
   return err instanceof Error ? err.message : "Failed to fetch quote";
 }
@@ -165,7 +171,7 @@ export default function QuoteCalculator({ anchorDomain, token, lockedQuote, onQu
       });
       setIndicative(price);
     } catch (err) {
-      setError(describeQuoteError(err, resolvedSell, resolvedBuy));
+      setError(describeQuoteError(err, resolvedSell, resolvedBuy, anchorDomain));
     } finally {
       setLoading(false);
     }
@@ -186,7 +192,7 @@ export default function QuoteCalculator({ anchorDomain, token, lockedQuote, onQu
       });
       onQuoteLocked(quote);
     } catch (err) {
-      setError(describeQuoteError(err, resolvedSell, resolvedBuy));
+      setError(describeQuoteError(err, resolvedSell, resolvedBuy, anchorDomain));
     } finally {
       setLocking(false);
     }
