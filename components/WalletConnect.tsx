@@ -1,14 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import {
-  getAddress,
-  getNetworkDetails,
-  isAllowed,
-  isConnected,
-  requestAccess,
-  WatchWalletChanges,
-} from "@stellar/freighter-api";
+import { getNetworkDetails, isConnected, requestAccess, WatchWalletChanges } from "@stellar/freighter-api";
 import { Networks } from "@stellar/stellar-sdk";
 import { freighterErrorMessage } from "@/lib/stellar/freighterError";
 import { NETWORK_PASSPHRASE } from "@/lib/stellar/config";
@@ -47,6 +40,17 @@ const EXPECTED_FREIGHTER_NETWORK = FREIGHTER_NETWORK_LABELS[NETWORK_PASSPHRASE] 
  * different account — `onConnect` fires again with the new address so the
  * caller (app/page.tsx) can invalidate any session state tied to the old
  * one.
+ *
+ * Deliberately does NOT auto-reconnect on mount, even if Freighter still
+ * has Ferry authorized from a previous visit — every page load or refresh
+ * starts unauthenticated, requiring an explicit "Connect Freighter Wallet"
+ * click, so nothing about the flow depends on invisible carried-over
+ * browser/extension state. Nothing in this app persists to localStorage
+ * or sessionStorage either (the SEP-10 token and all transfer state live
+ * only in React state — see lib/transferMachine.ts), so a refresh already
+ * clears everything on its own; this just stops Freighter's own
+ * remembered permission from silently re-populating publicKey on top of
+ * that clean state.
  */
 export default function WalletConnect({ onConnect, onDisconnect }: WalletConnectProps) {
   const [publicKey, setPublicKey] = useState<string | null>(null);
@@ -90,25 +94,6 @@ export default function WalletConnect({ onConnect, onDisconnect }: WalletConnect
     onDisconnect?.();
   }, [onDisconnect]);
 
-  // Re-hydrate an already-approved connection on load, without a popup.
-  useEffect(() => {
-    (async () => {
-      try {
-        const allowed = await isAllowed();
-        if (allowed.error || !allowed.isAllowed) return;
-        const address = await getAddress();
-        if (!address.error && address.address) {
-          setPublicKey(address.address);
-          onConnect?.(address.address);
-        }
-      } catch {
-        // Freighter not installed or user hasn't connected yet — ignore.
-      }
-    })();
-    // Only run once on mount.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   // Live sync: detect an account or network switch made inside Freighter
   // itself while Ferry is already connected. Freighter has no push-based
   // event for this, so WatchWalletChanges polls on our behalf.
@@ -135,11 +120,16 @@ export default function WalletConnect({ onConnect, onDisconnect }: WalletConnect
   if (publicKey) {
     return (
       <div className="flex flex-col items-end gap-2">
-        <div className="flex items-center gap-3 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-4 py-2">
-          <span className="h-2 w-2 rounded-full bg-emerald-400" />
-          <span className="font-mono text-sm text-emerald-300">{truncateAddress(publicKey)}</span>
-          <button onClick={disconnect} className="text-xs text-zinc-400 transition-colors hover:text-zinc-200">
-            Disconnect
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-4 py-2">
+            <span className="h-2 w-2 rounded-full bg-emerald-400" />
+            <span className="font-mono text-sm text-emerald-300">{truncateAddress(publicKey)}</span>
+          </div>
+          <button
+            onClick={disconnect}
+            className="rounded-full border border-red-400/40 bg-red-400/10 px-4 py-2 text-sm font-semibold text-red-200 transition-colors hover:bg-red-400/20"
+          >
+            Disconnect Wallet
           </button>
         </div>
         {networkWarning && <p className="max-w-xs text-right text-xs text-amber-400">{networkWarning}</p>}
