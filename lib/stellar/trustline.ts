@@ -74,3 +74,22 @@ export function describeLowReserveError(err: unknown): string | null {
   }
   return null;
 }
+
+/**
+ * Horizon rejects a Payment operation with `op_underfunded` when the
+ * source account doesn't hold enough of the asset being sent — a distinct
+ * failure mode from `describeLowReserveError`'s XLM-reserve case above:
+ * this is "you don't have enough EURC (or whichever asset)," not "you
+ * don't have enough XLM to cover a reserve or the network fee."
+ */
+export function describeUnderfundedError(err: unknown, assetCode: string): string | null {
+  const resultCodes = (err as { response?: { data?: { extras?: { result_codes?: Record<string, unknown> } } } })
+    ?.response?.data?.extras?.result_codes;
+  if (!resultCodes) return null;
+
+  const opCodes = Array.isArray(resultCodes.operations) ? (resultCodes.operations as string[]) : [];
+  if (opCodes.includes("op_underfunded")) {
+    return `Insufficient ${assetCode} balance to send this amount. Fund this account with more ${assetCode} and try again.`;
+  }
+  return null;
+}
