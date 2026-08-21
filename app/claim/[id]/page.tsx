@@ -7,6 +7,15 @@ import { validateIban } from "@/lib/iban";
 
 const RECEIVER_TYPE = "sep31-receiver";
 
+/** Formats a validated IBAN as `TR33 **** **** **** **** **** 4001` — first/last 4 visible, rest masked. */
+function maskIban(normalized: string): string {
+  if (normalized.length <= 8) return normalized;
+  const visibleStart = normalized.slice(0, 4);
+  const visibleEnd = normalized.slice(-4);
+  const masked = visibleStart + "*".repeat(normalized.length - 8) + visibleEnd;
+  return masked.match(/.{1,4}/g)?.join(" ") ?? masked;
+}
+
 /**
  * The recipient claim link (SOW Deliverable 3). A sender shares a URL to
  * this page after locking a quote; the recipient — with no Stellar wallet
@@ -137,9 +146,29 @@ export default function ClaimPage() {
           {customer.status === "ACCEPTED" ? (
             <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-4">
               <p className="text-sm font-semibold text-emerald-300">You&apos;re verified</p>
-              <p className="mt-1 text-xs text-zinc-500">
-                The sender can now complete the payment — no further action needed here.
-              </p>
+              {fullName || ibanResult?.valid ? (
+                <div className="mt-3 flex flex-col gap-1.5 border-t border-white/10 pt-3 text-xs">
+                  {fullName && (
+                    <p className="text-zinc-400">
+                      <span className="text-zinc-600">Recipient name</span> — {fullName}
+                    </p>
+                  )}
+                  {ibanResult?.valid && (
+                    <p className="font-mono text-zinc-400">
+                      <span className="font-sans text-zinc-600">IBAN</span> — {maskIban(ibanResult.normalized)}
+                    </p>
+                  )}
+                  {net && (
+                    <p className="text-zinc-400">
+                      <span className="text-zinc-600">Settlement amount</span> — {net} {asset ?? ""}
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <p className="mt-1 text-xs text-zinc-500">
+                  The sender can now complete the payment — no further action needed here.
+                </p>
+              )}
             </div>
           ) : (
             <div className="flex flex-col gap-4">

@@ -28,6 +28,8 @@ const {
   WebAuth,
 } = require("@stellar/stellar-sdk");
 const { isQuoteExpired, sumPaymentAmounts, isSettlementSufficient } = require("./settlement");
+const { validateIban } = require("./iban");
+const { customerKey } = require("./customerKey");
 
 const PORT = Number(process.env.PORT || 4001);
 const HOME_DOMAIN = process.env.HOME_DOMAIN || `localhost:${PORT}`;
@@ -79,7 +81,15 @@ async function loadOrGenerateKeypair(envVar, label) {
 // In-memory only — this is a mock anchor, not a durable service. Restarting
 // the process forgets every customer, quote, and transaction, same
 // intentional non-goal as Ferry's own lib/idempotency.ts / auditTrail.ts.
-const customers = new Map(); // account -> { status, fields }
+//
+// Keyed by `${account}:${type}`, not by `account` alone. The sender and a
+// SEP-31 receiver can be the *same* Stellar account here — Ferry's
+// recipient claim link reuses the sender's own SEP-10 token rather than
+// minting a receiver-scoped one (a known, stated simplification, see
+// KEY_MANAGEMENT.md §2) — so keying on account alone let a sender's own
+// already-ACCEPTED KYC record silently answer for the receiver's claim
+// too, skipping the IBAN form entirely. Namespacing by role closes that.
+const customers = new Map(); // "account:type" -> { status, fields } — see customerKey.js
 const quotes = new Map(); // quote id -> { sell_asset, buy_asset, sell_amount, buy_amount, price, expires_at }
 const transactions = new Map(); // tx id -> { status, quote_id, amount, sender, stellar_transaction_id?, payout_stellar_transaction_id? }
 
@@ -307,7 +317,7 @@ desc="MOCK / SIMULATED representation of Turkish Lira. Not backed by any bank, n
     const account = requireBearerAccount(req, res);
     if (!account) return;
     const type = req.query.type;
-    const existing = customers.get(account);
+    const existing = customers.get(customerKey(account, type));
     if (existing) return res.json(existing);
     const fields = type === "sep31-receiver" ? RECEIVER_FIELDS : SENDER_FIELDS;
     res.json({ status: "NEEDS_INFO", fields });
@@ -316,9 +326,28 @@ desc="MOCK / SIMULATED representation of Turkish Lira. Not backed by any bank, n
   app.put("/sep12/customer", (req, res) => {
     const account = requireBearerAccount(req, res);
     if (!account) return;
-    // Mock only: accepts anything and marks it ACCEPTED immediately. No
-    // real verification happens here — see README.md.
-    customers.set(account, { status: "ACCEPTED", id: account });
+    const { type } = req.body || {};
+
+    // A receiver record specifically requires a well-formed IBAN before
+    // it can be accepted — enforced here too, not only by Ferry's own
+    // client-side check, so an anchor-side rejection of a malformed IBAN
+    // is genuinely reproducible (previously untestable against any
+    // available anchor — see TESTNET_HASHES.md's failure-scenarios table).
+    if (type === "sep31-receiver") {
+      const iban = req.body?.bank_account_number;
+      if (!iban) {
+        return res.status(400).json({ error: "bank_account_number (IBAN) is required for a sep31-receiver record" });
+      }
+      const result = validateIban(iban);
+      if (!result.valid) {
+        return res.status(400).json({ error: "invalid_iban", message: result.reason });
+      }
+    }
+
+    // Mock only: accepts an otherwise-valid submission and marks it
+    // ACCEPTED immediately. No real identity verification happens here —
+    // see README.md.
+    customers.set(customerKey(account, type), { status: "ACCEPTED", id: account });
     res.json({ id: account });
   });
 
@@ -343,7 +372,7 @@ desc="MOCK / SIMULATED representation of Turkish Lira. Not backed by any bank, n
     if (asset_code !== "EURC") {
       return res.status(400).json({ error: `Asset [${asset_code}] not supported by this mock anchor — only EURC` });
     }
-    const customer = customers.get(account);
+    const customer = customers.get(customerKey(account));
     if (!customer || customer.status !== "ACCEPTED") {
       return res.status(400).json({ error: "Sender KYC not accepted — complete SEP-12 first" });
     }
