@@ -6,8 +6,34 @@ import { Horizon, Networks } from "@stellar/stellar-sdk";
  * app never has network parameters baked into application logic.
  */
 
-export const HORIZON_URL =
-  process.env.NEXT_PUBLIC_HORIZON_URL || "https://horizon-testnet.stellar.org";
+export function isLocalHostname(hostname: string): boolean {
+  const bare = hostname.toLowerCase();
+  return bare === "localhost" || bare === "127.0.0.1";
+}
+
+/**
+ * Unlike ANCHOR_DOMAIN below (which is deliberately scheme-optional — SEP-1
+ * resolution always builds its own https://{domain}/.well-known/... URL),
+ * Horizon's own SDK is passed this value verbatim and throws "Cannot
+ * connect to insecure horizon server" if it resolves to anything other
+ * than an https:// URL, unless `allowHttp` is explicitly set — which
+ * getHorizonServer() below only ever does for localhost/127.0.0.1.
+ * Normalizing a bare domain (e.g. NEXT_PUBLIC_HORIZON_URL set to
+ * "horizon-testnet.stellar.org" without a scheme — an easy mistake given
+ * ANCHOR_DOMAIN's own convention two lines below) here means that
+ * misconfiguration recovers to the correct https:// URL instead of
+ * throwing at Horizon.Server construction time.
+ */
+export function normalizeHorizonUrl(raw: string): string {
+  const trimmed = raw.trim().replace(/\/+$/, "");
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  const hostname = trimmed.split(":")[0];
+  return `${isLocalHostname(hostname) ? "http" : "https"}://${trimmed}`;
+}
+
+export const HORIZON_URL = normalizeHorizonUrl(
+  process.env.NEXT_PUBLIC_HORIZON_URL || "https://horizon-testnet.stellar.org"
+);
 
 export const NETWORK_PASSPHRASE =
   process.env.NEXT_PUBLIC_NETWORK_PASSPHRASE || Networks.TESTNET;
@@ -65,10 +91,27 @@ export const MOCK_TRY_ISSUER =
 
 let server: Horizon.Server | null = null;
 
+/**
+ * `allowHttp` is strictly scoped to localhost/127.0.0.1 (checked by
+ * hostname, not by whether the URL string happens to start with
+ * "http://") — a non-local HORIZON_URL never gets to opt into plain HTTP
+ * even if someone configures one explicitly. Passing `allowHttp: true`
+ * for an https:// URL is a harmless no-op (the SDK only consults it when
+ * the protocol isn't already https), so this doesn't need to also check
+ * HORIZON_URL's own scheme.
+ */
+export function isLocalHorizonUrl(url: string): boolean {
+  try {
+    return isLocalHostname(new URL(url).hostname);
+  } catch {
+    return false;
+  }
+}
+
 /** Lazily-constructed singleton Horizon testnet client. */
 export function getHorizonServer(): Horizon.Server {
   if (!server) {
-    server = new Horizon.Server(HORIZON_URL, { allowHttp: HORIZON_URL.startsWith("http://") });
+    server = new Horizon.Server(HORIZON_URL, { allowHttp: isLocalHorizonUrl(HORIZON_URL) });
   }
   return server;
 }
