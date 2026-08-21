@@ -16,18 +16,21 @@ export async function POST(req: NextRequest) {
   const rateLimit = checkRateLimit(req, "sep10-token");
   if (!rateLimit.allowed) return rateLimitResponse(rateLimit);
 
+  let domain: string | undefined;
   try {
-    const { domain, transaction } = await req.json();
+    const parsed = await req.json();
+    domain = parsed.domain;
+    const { transaction } = parsed;
     if (!domain || !transaction) {
       return NextResponse.json({ error: "`domain` and `transaction` are required" }, { status: 400 });
     }
 
     const { token } = await submitSignedChallenge(domain, transaction);
-    logger.info({ route: "sep10-token", event: "sep10.token.issued", status: 200 });
+    logger.info({ route: "sep10-token", event: "sep10.token.issued", status: 200, domain });
     return NextResponse.json({ token });
   } catch (err) {
     const { status, body } = toApiErrorResponse(err, "Unknown SEP-10 error");
-    logger.error({ route: "sep10-token", event: "sep10.token.failed", status, code: body.code });
+    logger.error({ route: "sep10-token", event: "sep10.token.failed", status, code: body.code, domain, detail: body.error });
     return NextResponse.json(body, { status });
   }
 }

@@ -42,7 +42,12 @@ export async function requestChallenge(
   if (homeDomain) url.searchParams.set("home_domain", homeDomain);
 
   const context = `SEP-10 challenge request to "${domain}"`;
-  const res = await anchorFetch(url.toString(), { method: "GET" }, context);
+  // Retry-safe (a GET), and worth it specifically for a free-tier host
+  // (e.g. Render) that spins down on inactivity — a connectivity failure
+  // on the first attempt while it's waking up is exactly the case this
+  // covers. Not a fix for a genuinely stale/unreachable deployment (that
+  // fails the same way on every attempt), only for a transient blip.
+  const res = await anchorFetch(url.toString(), { method: "GET" }, context, { retries: 2 });
   await assertAnchorOk(res, context);
   return res.json();
 }
