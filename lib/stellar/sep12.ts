@@ -30,6 +30,20 @@ export interface Sep12CustomerInfo {
   fields?: Record<string, Sep12Field>;
   provided_fields?: Record<string, Sep12Field & { status?: string }>;
   message?: string;
+  /**
+   * Testnet-only convenience, not a standard SEP-12 field: mock-anchor/
+   * returns this so the recipient claim page can show a real "you're
+   * verified" confirmation (name + masked IBAN) on a return visit, not
+   * only immediately after submitting. A real anchor has no reason to
+   * echo submitted PII back over the wire, masked or not — this exists
+   * because the mock anchor is the only "anchor" Ferry fully controls,
+   * specifically to demonstrate the UX capability.
+   */
+  mock_masked_fields?: {
+    first_name?: string;
+    last_name?: string;
+    bank_account_number_masked?: string;
+  };
 }
 
 export interface Sep12PutResponse {

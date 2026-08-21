@@ -28,7 +28,7 @@ const {
   WebAuth,
 } = require("@stellar/stellar-sdk");
 const { isQuoteExpired, sumPaymentAmounts, isSettlementSufficient } = require("./settlement");
-const { validateIban } = require("./iban");
+const { validateIban, maskIban } = require("./iban");
 const { customerKey } = require("./customerKey");
 const { publicBaseUrl } = require("./publicBaseUrl");
 
@@ -328,6 +328,7 @@ desc="MOCK / SIMULATED representation of Turkish Lira. Not backed by any bank, n
     // client-side check, so an anchor-side rejection of a malformed IBAN
     // is genuinely reproducible (previously untestable against any
     // available anchor — see TESTNET_HASHES.md's failure-scenarios table).
+    let mockMaskedFields;
     if (type === "sep31-receiver") {
       const iban = req.body?.bank_account_number;
       if (!iban) {
@@ -337,12 +338,26 @@ desc="MOCK / SIMULATED representation of Turkish Lira. Not backed by any bank, n
       if (!result.valid) {
         return res.status(400).json({ error: "invalid_iban", message: result.reason });
       }
+      // So the claim page can show a real "you're verified" confirmation
+      // (name + masked IBAN) on a *return* visit, not only immediately
+      // after submitting — without this, GET only ever reported status,
+      // never what was actually accepted. Only the masked IBAN is kept;
+      // the raw value isn't retained anywhere past this validation step.
+      mockMaskedFields = {
+        first_name: req.body?.first_name,
+        last_name: req.body?.last_name,
+        bank_account_number_masked: maskIban(result.normalized),
+      };
     }
 
     // Mock only: accepts an otherwise-valid submission and marks it
     // ACCEPTED immediately. No real identity verification happens here —
     // see README.md.
-    customers.set(customerKey(account, type), { status: "ACCEPTED", id: account });
+    customers.set(customerKey(account, type), {
+      status: "ACCEPTED",
+      id: account,
+      ...(mockMaskedFields ? { mock_masked_fields: mockMaskedFields } : {}),
+    });
     res.json({ id: account });
   });
 

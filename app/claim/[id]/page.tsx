@@ -7,15 +7,6 @@ import { validateIban } from "@/lib/iban";
 
 const RECEIVER_TYPE = "sep31-receiver";
 
-/** Formats a validated IBAN as `TR33 **** **** **** **** **** 4001` — first/last 4 visible, rest masked. */
-function maskIban(normalized: string): string {
-  if (normalized.length <= 8) return normalized;
-  const visibleStart = normalized.slice(0, 4);
-  const visibleEnd = normalized.slice(-4);
-  const masked = visibleStart + "*".repeat(normalized.length - 8) + visibleEnd;
-  return masked.match(/.{1,4}/g)?.join(" ") ?? masked;
-}
-
 /**
  * The recipient claim link (SOW Deliverable 3). A sender shares a URL to
  * this page after locking a quote; the recipient — with no Stellar wallet
@@ -51,6 +42,10 @@ export default function ClaimPage() {
   const [bankName, setBankName] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  // True while re-opening the form after an already-ACCEPTED record, via
+  // "Update Bank Details" below — distinct from the form simply being
+  // shown because nothing's been accepted yet.
+  const [editing, setEditing] = useState(false);
 
   const ibanResult = iban ? validateIban(iban) : null;
   const linkIncomplete = !domain || !token || !account;
@@ -105,6 +100,7 @@ export default function ClaimPage() {
       );
       const refreshed = await fetchCustomerInfo(domain, token, account!, RECEIVER_TYPE);
       setCustomer(refreshed);
+      setEditing(false);
       void result;
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : "Failed to submit your details");
@@ -143,19 +139,23 @@ export default function ClaimPage() {
 
       {!loading && customer && (
         <>
-          {customer.status === "ACCEPTED" ? (
+          {customer.status === "ACCEPTED" && !editing ? (
             <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-4">
               <p className="text-sm font-semibold text-emerald-300">You&apos;re verified</p>
-              {fullName || ibanResult?.valid ? (
+              {customer.mock_masked_fields ? (
                 <div className="mt-3 flex flex-col gap-1.5 border-t border-white/10 pt-3 text-xs">
-                  {fullName && (
+                  {(customer.mock_masked_fields.first_name || customer.mock_masked_fields.last_name) && (
                     <p className="text-zinc-400">
-                      <span className="text-zinc-600">Recipient name</span> — {fullName}
+                      <span className="text-zinc-600">Recipient name</span> —{" "}
+                      {[customer.mock_masked_fields.first_name, customer.mock_masked_fields.last_name]
+                        .filter(Boolean)
+                        .join(" ")}
                     </p>
                   )}
-                  {ibanResult?.valid && (
+                  {customer.mock_masked_fields.bank_account_number_masked && (
                     <p className="font-mono text-zinc-400">
-                      <span className="font-sans text-zinc-600">IBAN</span> — {maskIban(ibanResult.normalized)}
+                      <span className="font-sans text-zinc-600">IBAN</span> —{" "}
+                      {customer.mock_masked_fields.bank_account_number_masked}
                     </p>
                   )}
                   {net && (
@@ -169,6 +169,22 @@ export default function ClaimPage() {
                   The sender can now complete the payment — no further action needed here.
                 </p>
               )}
+              <button
+                onClick={() => {
+                  setFullName(
+                    [customer.mock_masked_fields?.first_name, customer.mock_masked_fields?.last_name]
+                      .filter(Boolean)
+                      .join(" ")
+                  );
+                  setIban("");
+                  setBankName("");
+                  setSubmitError(null);
+                  setEditing(true);
+                }}
+                className="mt-4 rounded-lg border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-semibold text-zinc-200 transition-colors hover:bg-white/10"
+              >
+                Update Bank Details
+              </button>
             </div>
           ) : (
             <div className="flex flex-col gap-4">
@@ -225,13 +241,26 @@ export default function ClaimPage() {
 
               {submitError && <p className="text-xs text-red-400">{submitError}</p>}
 
-              <button
-                onClick={submit}
-                disabled={submitting || !fullName || !iban}
-                className="rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-black transition-colors hover:bg-zinc-200 disabled:opacity-50"
-              >
-                {submitting ? "Submitting…" : "Submit my details"}
-              </button>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={submit}
+                  disabled={submitting || !fullName || !iban}
+                  className="rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-black transition-colors hover:bg-zinc-200 disabled:opacity-50"
+                >
+                  {submitting ? "Submitting…" : "Submit my details"}
+                </button>
+                {editing && (
+                  <button
+                    onClick={() => {
+                      setEditing(false);
+                      setSubmitError(null);
+                    }}
+                    className="text-xs font-semibold text-zinc-500 transition-colors hover:text-zinc-300"
+                  >
+                    Cancel
+                  </button>
+                )}
+              </div>
             </div>
           )}
         </>

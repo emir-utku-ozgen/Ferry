@@ -17,6 +17,12 @@ export interface Sep12CustomerInfo {
   fields?: Record<string, Sep12Field>;
   provided_fields?: Record<string, Sep12Field & { status?: string }>;
   message?: string;
+  /** Testnet-only convenience field — see lib/stellar/sep12.ts's copy of this type for why. */
+  mock_masked_fields?: {
+    first_name?: string;
+    last_name?: string;
+    bank_account_number_masked?: string;
+  };
 }
 
 export async function fetchCustomerInfo(

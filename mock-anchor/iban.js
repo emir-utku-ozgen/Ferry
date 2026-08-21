@@ -59,4 +59,21 @@ function validateIban(raw) {
   return { valid: true, normalized };
 }
 
-module.exports = { validateIban };
+/**
+ * Formats a validated, normalized IBAN as e.g. "TR33 **** **** **** ****
+ * **** 4001" — first/last 4 characters visible, the rest masked. Mirrors
+ * app/claim/[id]/page.tsx's own client-side maskIban() exactly, so the
+ * two produce identical output. A real anchor would never echo a
+ * submitted IBAN back over the wire unmasked; this mock shouldn't either
+ * — GET /sep12/customer only ever returns this masked form, never the
+ * raw value (see server.js's PUT handler).
+ */
+function maskIban(normalized) {
+  if (normalized.length <= 8) return normalized;
+  const visibleStart = normalized.slice(0, 4);
+  const visibleEnd = normalized.slice(-4);
+  const masked = visibleStart + "*".repeat(normalized.length - 8) + visibleEnd;
+  return masked.match(/.{1,4}/g)?.join(" ") ?? masked;
+}
+
+module.exports = { validateIban, maskIban };
