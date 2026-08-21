@@ -88,6 +88,54 @@ function describeQuoteError(err: unknown, sellAsset: string, buyAsset: string, a
   return err instanceof Error ? err.message : "Failed to fetch quote";
 }
 
+/** Formats whole seconds as "M:SS" (e.g. 65 -> "1:05") for a compact countdown display. */
+export function formatCountdown(secondsRemaining: number): string {
+  const clamped = Math.max(0, Math.round(secondsRemaining));
+  const minutes = Math.floor(clamped / 60);
+  const seconds = clamped % 60;
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
+/**
+ * Fraction of the quote's total validity window still remaining, clamped
+ * to [0, 1] — drives the countdown bar's width and color. Needs `lockedAt`
+ * (captured client-side the moment the quote was locked, not something
+ * SEP-38 itself reports) since "percent remaining" requires knowing the
+ * total window, not just the absolute expiry instant.
+ */
+export function computeFractionRemaining(nowMs: number, lockedAtMs: number, expiresAtMs: number): number {
+  const totalMs = expiresAtMs - lockedAtMs;
+  if (totalMs <= 0) return 0;
+  return Math.max(0, Math.min(1, (expiresAtMs - nowMs) / totalMs));
+}
+
+/** Visual countdown: MM:SS + a depleting progress bar, escalating green -> amber -> red as time runs out. */
+function QuoteCountdown({ secondsRemaining, fractionRemaining }: { secondsRemaining: number; fractionRemaining: number }) {
+  const tone =
+    fractionRemaining > 0.5
+      ? { text: "text-emerald-300", bar: "bg-emerald-400" }
+      : fractionRemaining > 0.2
+        ? { text: "text-amber-300", bar: "bg-amber-400" }
+        : { text: "text-red-400", bar: "bg-red-500" };
+
+  return (
+    <div className="mt-2">
+      <div className="flex items-baseline justify-between">
+        <span className="text-[11px] text-zinc-500">Quote expires in</span>
+        <span className={`font-mono text-sm font-semibold tabular-nums ${tone.text}`}>
+          {formatCountdown(secondsRemaining)}
+        </span>
+      </div>
+      <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+        <div
+          className={`h-full rounded-full transition-[width] duration-1000 ease-linear ${tone.bar}`}
+          style={{ width: `${fractionRemaining * 100}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
 function FeeBreakdown({ fee }: { fee: Sep38Fee }) {
   return (
     <div className="mt-2 border-t border-white/10 pt-2">
@@ -121,14 +169,30 @@ export default function QuoteCalculator({ anchorDomain, token, lockedQuote, onQu
   const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const [anchorCurrencies, setAnchorCurrencies] = useState<AnchorCurrency[]>([]);
+  // Captured client-side the instant a quote is locked (or refreshed) —
+  // SEP-38 only reports the expiry instant, not when the validity window
+  // started, but the countdown bar needs the total window to compute a
+  // percentage, not just seconds remaining.
+  const [lockedAtMs, setLockedAtMs] = useState<number | null>(null);
 
   // Live countdown for the locked quote's expiry — re-renders once a
   // second so "Refresh quote" appears the instant it goes stale, instead
   // of only being caught later when a submit is attempted.
   useEffect(() => {
     if (!lockedQuote) return;
+    let cancelled = false;
+    // Deferred one microtask so this isn't a synchronous setState call
+    // inside the effect body (react-hooks' set-state-in-effect rule) —
+    // same pattern as TransferPanel.tsx's trustline-check effect.
+    // Functionally instantaneous either way.
+    Promise.resolve().then(() => {
+      if (!cancelled) setLockedAtMs(Date.now());
+    });
     const interval = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(interval);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
   }, [lockedQuote]);
 
   // Discover the currently-configured anchor's real asset issuers (SEP-1
@@ -153,6 +217,8 @@ export default function QuoteCalculator({ anchorDomain, token, lockedQuote, onQu
   const expiresAtMs = lockedQuote ? new Date(lockedQuote.expires_at).getTime() : null;
   const quoteExpired = expiresAtMs !== null && now >= expiresAtMs;
   const secondsToExpiry = expiresAtMs !== null ? Math.max(0, Math.round((expiresAtMs - now) / 1000)) : null;
+  const fractionRemaining =
+    expiresAtMs !== null && lockedAtMs !== null ? computeFractionRemaining(now, lockedAtMs, expiresAtMs) : 0;
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -300,20 +366,15 @@ export default function QuoteCalculator({ anchorDomain, token, lockedQuote, onQu
           <p className="mt-2 font-mono text-[11px] text-zinc-500">id {lockedQuote.id}</p>
 
           {quoteExpired ? (
-            <div className="mt-3 flex items-center justify-between gap-2">
-              <p className="text-[11px] font-semibold text-amber-300">This quote has expired.</p>
-              <button
-                onClick={lockRate}
-                disabled={locking || !token}
-                className="rounded-lg border border-amber-400/40 bg-amber-400/10 px-3 py-1.5 text-xs font-semibold text-amber-200 transition-colors hover:bg-amber-400/20 disabled:opacity-50"
-              >
-                {locking ? "Refreshing…" : "Refresh quote"}
-              </button>
-            </div>
+            <button
+              onClick={lockRate}
+              disabled={locking || !token}
+              className="mt-3 w-full rounded-lg border border-red-400/40 bg-red-400/10 px-4 py-2.5 text-sm font-semibold text-red-300 transition-colors hover:bg-red-400/20 disabled:opacity-50"
+            >
+              {locking ? "Refreshing…" : "Quote Expired — Refresh Quote"}
+            </button>
           ) : (
-            <p className="mt-2 text-[11px] text-zinc-500">
-              Expires in {secondsToExpiry}s ({new Date(lockedQuote.expires_at).toLocaleTimeString()})
-            </p>
+            <QuoteCountdown secondsRemaining={secondsToExpiry ?? 0} fractionRemaining={fractionRemaining} />
           )}
         </div>
       )}
