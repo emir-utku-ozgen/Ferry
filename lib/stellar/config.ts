@@ -55,20 +55,35 @@ export const HOME_DOMAIN =
  * local process Vercel has nowhere to host — this makes the same fix
  * deployable. See docs/RUNBOOK.md for the full switching procedure.
  */
-export const EMBEDDED_MOCK_ANCHOR_ENABLED = process.env.NEXT_PUBLIC_ENABLE_EMBEDDED_MOCK_ANCHOR === "true";
+// Also honors a server-only `ENABLE_EMBEDDED_MOCK_ANCHOR` (no NEXT_PUBLIC_
+// prefix), for anything that only ever runs server-side and would rather
+// not depend on NEXT_PUBLIC_ build-time inlining at all — see
+// lib/stellar/anchorAllowlist.ts, which reads its own copy of this same
+// dual check independently (never imports this constant), specifically so
+// the SSRF allowlist's embedded-anchor detection can't be affected by
+// whatever this shared client+server module's own NEXT_PUBLIC_ substitution
+// did in a given bundle. This export remains the one client-facing UI code
+// (app/page.tsx) reads for display purposes, where only the NEXT_PUBLIC_
+// variant can ever matter (a server-only var is never available in a
+// browser bundle, by Next.js's own design).
+export const EMBEDDED_MOCK_ANCHOR_ENABLED =
+  process.env.ENABLE_EMBEDDED_MOCK_ANCHOR === "true" || process.env.NEXT_PUBLIC_ENABLE_EMBEDDED_MOCK_ANCHOR === "true";
 
 /**
  * The domain this deployment is reachable at, used only as
  * EMBEDDED_MOCK_ANCHOR_ENABLED's own default anchor domain below — an
  * explicit `NEXT_PUBLIC_ANCHOR_DOMAIN` always overrides this. Prefers an
- * explicitly-set `NEXT_PUBLIC_APP_URL`, then Vercel's own automatically
- * populated `VERCEL_URL` (bare host, no scheme — set on every Vercel
- * deployment with no configuration needed), then falls back to
- * HOME_DOMAIN for local dev.
+ * explicitly-set `NEXT_PUBLIC_APP_URL`, then Vercel's automatically
+ * populated `VERCEL_PROJECT_PRODUCTION_URL` (the assigned production
+ * alias — set on Production deployments specifically), then `VERCEL_URL`
+ * (the current deployment's own unique URL, always set on Vercel), then
+ * falls back to HOME_DOMAIN for local dev.
  */
 function embeddedAnchorSelfDomain(): string {
   const explicitAppUrl = process.env.NEXT_PUBLIC_APP_URL;
   if (explicitAppUrl) return explicitAppUrl.trim().replace(/^https?:\/\//i, "").replace(/\/+$/, "");
+  const prodUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL;
+  if (prodUrl) return prodUrl.trim().replace(/\/+$/, "");
   const vercelUrl = process.env.VERCEL_URL;
   if (vercelUrl) return vercelUrl.trim().replace(/\/+$/, "");
   return HOME_DOMAIN;
