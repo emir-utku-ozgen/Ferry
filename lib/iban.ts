@@ -68,3 +68,18 @@ export function validateIban(raw: string): IbanValidationResult {
 
   return { valid: true, normalized };
 }
+
+/**
+ * Formats a validated, normalized IBAN as e.g. "TR33 **** **** **** ****
+ * **** 4001" — first/last 4 characters visible, the rest masked. A real
+ * anchor would never echo a submitted IBAN back over the wire unmasked;
+ * the embedded mock anchor (`app/api/mock-anchor/sep12/customer/route.ts`)
+ * uses this so `GET /sep12/customer` only ever returns this masked form.
+ */
+export function maskIban(normalized: string): string {
+  if (normalized.length <= 8) return normalized;
+  const visibleStart = normalized.slice(0, 4);
+  const visibleEnd = normalized.slice(-4);
+  const masked = visibleStart + "*".repeat(normalized.length - 8) + visibleEnd;
+  return masked.match(/.{1,4}/g)?.join(" ") ?? masked;
+}

@@ -39,6 +39,28 @@ ANCHOR_ALLOWLIST=localhost:4001
 
 Full detail — what the mock anchor does and doesn't implement, why it exists instead of the real Stellar Anchor Platform, and the "TRY payout is a demo artifact, not a real payout" caveat — is in `mock-anchor/README.md` and `CORRIDOR_VERIFICATION.md` §5. One related code change worth knowing about: `lib/stellar/toml.ts` allows plain-HTTP `stellar.toml` resolution, but *only* for `localhost`/`127.0.0.1` domains (the mock anchor has no TLS certificate) — every other domain still requires HTTPS exactly as before.
 
+### 2.0.1 Embedded mock anchor — single Vercel deployment, no second host
+
+`mock-anchor/` is a standalone Express process (§2.2 below deploys it as its own long-lived Render/Railway service, specifically because it holds in-memory state and runs a background poller — Vercel's serverless functions can't host either). As of this session, the same TRY-leg mock is also available **embedded inside Ferry's own Next.js app** — `app/api/mock-anchor/*` and `app/.well-known/stellar.toml` — so a single Vercel deployment can act as its own anchor with no second host at all. This exists specifically because `testanchor.stellar.org`'s SEP-31 endpoint is unreliable/broken (`GAP_ANALYSIS.md`), which otherwise makes the live Vercel demo unable to complete a transfer end-to-end.
+
+To enable it, set on the Vercel deployment:
+
+| Var | Value |
+|---|---|
+| `NEXT_PUBLIC_ENABLE_EMBEDDED_MOCK_ANCHOR` | `true` |
+| `MOCK_ANCHOR_SIGNING_SECRET` | a pinned Testnet secret key (same generation method as `mock-anchor/`'s own `SIGNING_SECRET`, §2.2 below) — **required** for a stable production deployment; leaving it unset generates a new random keypair per warm serverless instance, and SEP-10 needs the same signing key across the challenge-issue and challenge-verify requests |
+| `MOCK_ANCHOR_TRY_ISSUER_SECRET` | a second pinned keypair, same reasoning |
+| `MOCK_ANCHOR_JWT_SECRET` | any random string |
+
+Leave `NEXT_PUBLIC_ANCHOR_DOMAIN` and `ANCHOR_ALLOWLIST` **unset** — with the flag on, `ANCHOR_DOMAIN` (`lib/stellar/config.ts`) defaults to this deployment's own domain (`NEXT_PUBLIC_APP_URL`, or Vercel's automatically-populated `VERCEL_URL`) instead of `testanchor.stellar.org`, and that domain is auto-added to the allowlist (`lib/stellar/anchorAllowlist.ts`) — no separate allowlist edit needed. An explicit `NEXT_PUBLIC_ANCHOR_DOMAIN` still overrides this if you want to point at something else instead.
+
+**What's different from the standalone `mock-anchor/` behind this same flag:**
+- **Settlement detection is on-demand, not a background poller.** `mock-anchor/server.js` watches Horizon every 5s via `setInterval`, independent of any client request. The embedded version has no equivalent (Vercel functions don't run between requests) — instead, `GET /api/mock-anchor/sep31/transactions/:id` checks Horizon for the matching payment *at the moment it's called* (`lib/mockAnchor/checkSettlement.ts`). Since `TransferPanel.tsx`'s `Sep31Panel` already polls this endpoint every 4s while a transfer is pending, the end-user-visible cadence is effectively the same — the check is just client-triggered instead of server-timer-triggered.
+- **In-memory state is per-instance, not per-process.** Same caveat as `lib/rateLimit.ts`/`lib/idempotency.ts`/`lib/auditTrail.ts` (§3 below): a warm Vercel instance serving one demo session end-to-end behaves correctly; a cold start landing on a different instance mid-flow won't see records created on another. Fine for a single reviewer walking through a demo in one sitting; not a substitute for a real datastore at scale.
+- **No optional demo TRY payout leg.** `mock-anchor/server.js`'s opt-in `MOCK_PAYOUT_DEMO_ACCOUNT` (a second, on-chain demonstrative TRY payment) wasn't ported — it was off by default and isn't needed for the sender-side "green checkmarks" walkthrough, which only depends on the real, checkable EURC payment `stellar_transaction_id` the settlement check above already produces.
+
+Confirm it's working via `GET https://<your-deployment>/api/mock-anchor/health` (reports the current signing key / TRY issuer and whether each secret is pinned) and `GET https://<your-deployment>/.well-known/stellar.toml`.
+
 ### 2.1 Testnet → Mainnet switching procedure
 
 1. Confirm a contracted production anchor exists and its domain is known (`CORRIDOR_VERIFICATION.md` — **not yet true as of this writing**; do not proceed past this step until it is).

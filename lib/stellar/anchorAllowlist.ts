@@ -1,4 +1,5 @@
 import { AnchorError } from "./anchorError";
+import { ANCHOR_DOMAIN, EMBEDDED_MOCK_ANCHOR_ENABLED } from "./config";
 
 /**
  * Anchor domain allowlist.
@@ -34,7 +35,18 @@ function parseAllowlist(): Set<string> {
   const domains = raw
     ? raw.split(",").map((d) => normalizeAnchorDomain(d).toLowerCase()).filter(Boolean)
     : DEFAULT_ALLOWLIST;
-  return new Set(domains);
+  const allowlist = new Set(domains);
+
+  // When this deployment is itself acting as the anchor
+  // (NEXT_PUBLIC_ENABLE_EMBEDDED_MOCK_ANCHOR=true), its own domain must be
+  // allowed regardless of what ANCHOR_ALLOWLIST was (or wasn't) explicitly
+  // set to — otherwise the embedded anchor is unreachable by default and
+  // every operator would need to remember to add themselves to their own
+  // allowlist, exactly the kind of footgun this file exists to prevent
+  // for everyone else's domain.
+  if (EMBEDDED_MOCK_ANCHOR_ENABLED) allowlist.add(ANCHOR_DOMAIN.toLowerCase());
+
+  return allowlist;
 }
 
 const allowlist = parseAllowlist();

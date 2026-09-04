@@ -46,6 +46,35 @@ export const HOME_DOMAIN =
   process.env.NEXT_PUBLIC_HOME_DOMAIN || "localhost:3000";
 
 /**
+ * When set, Ferry's own Next.js deployment doubles as the anchor: the
+ * SEP-1/10/12/31/38 endpoints Ferry's orchestrator resolves are served by
+ * this same app (`app/api/mock-anchor/*`, `app/.well-known/stellar.toml`)
+ * instead of an external anchor. Exists specifically because
+ * `testanchor.stellar.org`'s SEP-31 endpoint is unreliable/broken (see
+ * GAP_ANALYSIS.md), and `mock-anchor/`'s own standalone fix only runs as a
+ * local process Vercel has nowhere to host — this makes the same fix
+ * deployable. See docs/RUNBOOK.md for the full switching procedure.
+ */
+export const EMBEDDED_MOCK_ANCHOR_ENABLED = process.env.NEXT_PUBLIC_ENABLE_EMBEDDED_MOCK_ANCHOR === "true";
+
+/**
+ * The domain this deployment is reachable at, used only as
+ * EMBEDDED_MOCK_ANCHOR_ENABLED's own default anchor domain below — an
+ * explicit `NEXT_PUBLIC_ANCHOR_DOMAIN` always overrides this. Prefers an
+ * explicitly-set `NEXT_PUBLIC_APP_URL`, then Vercel's own automatically
+ * populated `VERCEL_URL` (bare host, no scheme — set on every Vercel
+ * deployment with no configuration needed), then falls back to
+ * HOME_DOMAIN for local dev.
+ */
+function embeddedAnchorSelfDomain(): string {
+  const explicitAppUrl = process.env.NEXT_PUBLIC_APP_URL;
+  if (explicitAppUrl) return explicitAppUrl.trim().replace(/^https?:\/\//i, "").replace(/\/+$/, "");
+  const vercelUrl = process.env.VERCEL_URL;
+  if (vercelUrl) return vercelUrl.trim().replace(/\/+$/, "");
+  return HOME_DOMAIN;
+}
+
+/**
  * Default anchor domain used to resolve stellar.toml (SEP-1) and discover
  * the WEB_AUTH_ENDPOINT / TRANSFER_SERVER_SEP0024 / DIRECT_PAYMENT_SERVER /
  * ANCHOR_QUOTE_SERVER endpoints for SEP-10/24/31/38.
@@ -58,8 +87,17 @@ export const HOME_DOMAIN =
  * normalization independently for any domain that reaches it a different
  * way (e.g. a hand-built `/claim/[id]` link) — this is the client-facing
  * copy of that same tolerance, not a substitute for it.
+ *
+ * Falls back to this deployment's own domain (`embeddedAnchorSelfDomain()`)
+ * instead of `testanchor.stellar.org` when EMBEDDED_MOCK_ANCHOR_ENABLED is
+ * on and no explicit `NEXT_PUBLIC_ANCHOR_DOMAIN` is set — an explicit value
+ * always wins either way, so this never surprises a deployment that already
+ * configures its own anchor domain.
  */
-export const ANCHOR_DOMAIN = (process.env.NEXT_PUBLIC_ANCHOR_DOMAIN || "testanchor.stellar.org")
+export const ANCHOR_DOMAIN = (
+  process.env.NEXT_PUBLIC_ANCHOR_DOMAIN ||
+  (EMBEDDED_MOCK_ANCHOR_ENABLED ? embeddedAnchorSelfDomain() : "testanchor.stellar.org")
+)
   .trim()
   .replace(/^https?:\/\//i, "")
   .replace(/\/+$/, "");
