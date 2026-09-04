@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { fetchCustomerInfo, submitCustomerInfo, type Sep12CustomerInfo } from "@/lib/stellar/client/sep12Client";
 import { validateIban } from "@/lib/iban";
+import Spinner from "@/components/Spinner";
 
 const RECEIVER_TYPE = "sep31-receiver";
 
@@ -125,7 +126,7 @@ export default function ClaimPage() {
   return (
     <RecipientShell>
       {net && (
-        <div className="mb-6 rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-4">
+        <div className="mb-6 rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.06] p-4 backdrop-blur-xl">
           <p className="text-xs text-zinc-500">You&apos;re receiving</p>
           <p className="mt-1 text-2xl font-semibold text-emerald-300">
             {net} {asset ?? ""}
@@ -134,16 +135,26 @@ export default function ClaimPage() {
         </div>
       )}
 
-      {loading && <p className="text-xs text-zinc-500">Loading…</p>}
+      {loading && (
+        <p className="flex items-center gap-2 text-xs text-zinc-500">
+          <Spinner className="h-3.5 w-3.5 text-zinc-500" />
+          Loading…
+        </p>
+      )}
       {loadError && <p className="text-xs text-red-400">{loadError}</p>}
 
       {!loading && customer && (
         <>
           {customer.status === "ACCEPTED" && !editing ? (
-            <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-4">
-              <p className="text-sm font-semibold text-emerald-300">You&apos;re verified</p>
+            <div className="animate-fade-in rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.06] p-4 backdrop-blur-xl">
+              <p className="flex items-center gap-1.5 text-sm font-semibold text-emerald-300">
+                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M20 6 9 17l-5-5" />
+                </svg>
+                You&apos;re verified
+              </p>
               {customer.mock_masked_fields ? (
-                <div className="mt-3 flex flex-col gap-1.5 border-t border-white/10 pt-3 text-xs">
+                <div className="mt-3 flex flex-col gap-1.5 border-t border-white/[0.08] pt-3 text-xs">
                   {(customer.mock_masked_fields.first_name || customer.mock_masked_fields.last_name) && (
                     <p className="text-zinc-400">
                       <span className="text-zinc-600">Recipient name</span> —{" "}
@@ -181,13 +192,13 @@ export default function ClaimPage() {
                   setSubmitError(null);
                   setEditing(true);
                 }}
-                className="mt-4 rounded-lg border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-semibold text-zinc-200 transition-colors hover:bg-white/10"
+                className="mt-4 rounded-lg border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-semibold text-zinc-200 transition-all duration-150 hover:bg-white/10 active:scale-[0.98]"
               >
                 Update Bank Details
               </button>
             </div>
           ) : (
-            <div className="flex flex-col gap-4">
+            <div className="animate-fade-in flex flex-col gap-4">
               {customer.status === "REJECTED" && (
                 <p className="text-xs text-red-400">
                   {customer.message ?? "The anchor rejected these details. Correct and resubmit below."}
@@ -201,7 +212,7 @@ export default function ClaimPage() {
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
                   placeholder="Ada Lovelace"
-                  className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-white/30"
+                  className="mt-1 w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 text-sm text-white outline-none transition-colors duration-150 focus:border-white/25 focus:bg-black/30"
                 />
               </label>
 
@@ -212,7 +223,7 @@ export default function ClaimPage() {
                   value={iban}
                   onChange={(e) => setIban(e.target.value)}
                   placeholder="TR33 0006 1005 1978 6457 8413 26"
-                  className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 font-mono text-sm text-white outline-none focus:border-white/30"
+                  className="mt-1 w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 font-mono text-sm text-white outline-none transition-colors duration-150 focus:border-white/25 focus:bg-black/30"
                 />
                 {iban && ibanResult && !ibanResult.valid && (
                   <p className="mt-1 text-[11px] text-red-400">{ibanResult.reason}</p>
@@ -226,12 +237,12 @@ export default function ClaimPage() {
                   type="text"
                   value={bankName}
                   onChange={(e) => setBankName(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-white/30"
+                  className="mt-1 w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 text-sm text-white outline-none transition-colors duration-150 focus:border-white/25 focus:bg-black/30"
                 />
               </label>
 
               {hasBinaryFields && (
-                <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-[11px] leading-relaxed text-amber-200/80">
+                <p className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-[11px] leading-relaxed text-amber-200/80">
                   This anchor also requests a photo ID for full verification. Document upload isn&apos;t supported
                   by Ferry&apos;s current SEP-12 integration (text fields only) — a production integration would
                   submit this as a SEP-12 binary field or hand off to the anchor&apos;s own hosted verification
@@ -245,8 +256,9 @@ export default function ClaimPage() {
                 <button
                   onClick={submit}
                   disabled={submitting || !fullName || !iban}
-                  className="rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-black transition-colors hover:bg-zinc-200 disabled:opacity-50"
+                  className="flex items-center justify-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-black transition-all duration-150 hover:bg-zinc-100 active:scale-[0.98] disabled:opacity-60 disabled:active:scale-100"
                 >
+                  {submitting && <Spinner className="h-3.5 w-3.5 text-black" />}
                   {submitting ? "Submitting…" : "Submit my details"}
                 </button>
                 {editing && (
@@ -255,7 +267,7 @@ export default function ClaimPage() {
                       setEditing(false);
                       setSubmitError(null);
                     }}
-                    className="text-xs font-semibold text-zinc-500 transition-colors hover:text-zinc-300"
+                    className="text-xs font-semibold text-zinc-500 transition-colors duration-150 hover:text-zinc-300"
                   >
                     Cancel
                   </button>
@@ -277,9 +289,12 @@ export default function ClaimPage() {
 function RecipientShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="mx-auto flex w-full max-w-md flex-1 flex-col px-8 py-16">
-      <div className="mb-8 flex items-center gap-2">
+      <div className="mb-8 flex items-center gap-2.5">
+        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-400 to-sky-500 text-sm font-bold text-black">
+          F
+        </span>
         <span className="text-lg font-semibold tracking-tight text-white">Ferry</span>
-        <span className="rounded-full border border-white/15 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-zinc-400">
+        <span className="rounded-full border border-white/15 bg-white/[0.04] px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-zinc-400">
           Claim payout
         </span>
       </div>

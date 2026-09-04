@@ -23,6 +23,7 @@ import { freighterErrorMessage } from "@/lib/stellar/freighterError";
 import { ApiError } from "@/lib/stellar/client/http";
 import type { FlowError, KycStatus } from "@/components/StatusTracker";
 import { EURC_ISSUER } from "@/lib/stellar/config";
+import Spinner from "@/components/Spinner";
 
 // EURC listed first — it's the actual settlement asset for the EUR(EURC)
 // -> TRY corridor's SEP-31 leg (see mock-anchor/), the corridor this
@@ -109,10 +110,10 @@ export function classifyTransferError(err: unknown): FlowError {
  */
 export default function TransferPanel(props: TransferPanelProps) {
   return (
-    <div className="w-full rounded-2xl border border-white/10 bg-white/[0.03] p-6">
+    <div className="w-full rounded-2xl border border-white/[0.08] bg-white/[0.03] p-6 shadow-2xl shadow-black/40 backdrop-blur-xl transition-colors duration-200 hover:border-white/[0.12]">
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-400">Transfer</h2>
-        <span className="rounded-full border border-white/10 px-3 py-1 text-xs text-zinc-400">SEP-31 Direct</span>
+        <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-zinc-400">SEP-31 Direct</span>
       </div>
 
       <Sep31Panel {...props} />
@@ -141,7 +142,7 @@ const PAYMENT_FLOW_ERROR_TITLES: Record<PaymentFlowErrorKind, string> = {
 function PaymentFlowErrorCard({ error, busy }: { error: PaymentFlowError; busy: boolean }) {
   const isCancelled = error.kind === "cancelled";
   return (
-    <div className={`rounded-lg border p-3 ${isCancelled ? "border-amber-500/30 bg-amber-500/10" : "border-red-500/30 bg-red-500/10"}`}>
+    <div className={`animate-fade-in rounded-xl border p-3 backdrop-blur-sm ${isCancelled ? "border-amber-500/30 bg-amber-500/10" : "border-red-500/30 bg-red-500/10"}`}>
       <p className={`text-xs font-semibold ${isCancelled ? "text-amber-300" : "text-red-400"}`}>
         {PAYMENT_FLOW_ERROR_TITLES[error.kind]}
       </p>
@@ -149,12 +150,13 @@ function PaymentFlowErrorCard({ error, busy }: { error: PaymentFlowError; busy: 
       <button
         onClick={error.retry}
         disabled={busy}
-        className={`mt-3 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors disabled:opacity-50 ${
+        className={`mt-3 flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all duration-150 active:scale-[0.98] disabled:opacity-50 ${
           isCancelled
             ? "border-amber-400/40 bg-amber-400/10 text-amber-200 hover:bg-amber-400/20"
             : "border-red-400/40 bg-red-400/10 text-red-300 hover:bg-red-400/20"
         }`}
       >
+        {busy && <Spinner className={`h-3 w-3 ${isCancelled ? "text-amber-200" : "text-red-300"}`} />}
         {busy ? "Retrying…" : "Try Again"}
       </button>
     </div>
@@ -422,16 +424,16 @@ function Sep31Panel({ anchorDomain, publicKey, token, lockedQuote, kycStatus, on
   return (
     <div className="mt-4 flex flex-col gap-4">
       {lockedQuote && (
-        <div className="rounded-lg border border-white/10 bg-black/20 p-3">
+        <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/[0.06] p-4">
           <p className="text-[11px] text-zinc-500">Recipient will net (locked quote)</p>
-          <p className="text-lg font-semibold text-white">
+          <p className="mt-0.5 text-lg font-semibold text-emerald-300">
             {lockedQuote.buy_amount} {buyAssetLabel(lockedQuote.buy_asset)}
           </p>
         </div>
       )}
 
       {lockedQuote && (
-        <div className="rounded-lg border border-white/10 bg-black/20 p-3">
+        <div className="rounded-xl border border-white/[0.08] bg-black/20 p-3">
           <p className="text-[11px] text-zinc-500">Recipient link</p>
           <p className="mt-1 text-[11px] leading-relaxed text-zinc-600">
             Send this to your recipient — they open it, enter their name and IBAN, and it goes straight to the
@@ -439,8 +441,13 @@ function Sep31Panel({ anchorDomain, publicKey, token, lockedQuote, kycStatus, on
           </p>
           <button
             onClick={copyRecipientLink}
-            className="mt-2 rounded-lg border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-semibold text-zinc-200 transition-colors hover:bg-white/10"
+            className="mt-2 flex items-center gap-1.5 rounded-lg border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-semibold text-zinc-200 transition-all duration-150 hover:bg-white/10 active:scale-[0.98]"
           >
+            {linkCopied && (
+              <svg viewBox="0 0 24 24" className="h-3 w-3 text-emerald-400" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M20 6 9 17l-5-5" />
+              </svg>
+            )}
             {linkCopied ? "Copied!" : "Copy recipient link"}
           </button>
         </div>
@@ -456,18 +463,18 @@ function Sep31Panel({ anchorDomain, publicKey, token, lockedQuote, kycStatus, on
             step="0.0001"
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
-            className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-white/30"
+            className="mt-1 w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 text-sm text-white outline-none transition-colors duration-150 focus:border-white/25 focus:bg-black/30"
           />
         </label>
-        <label className="w-28 text-xs text-zinc-500">
+        <label className="w-32 text-xs text-zinc-500">
           Settlement asset
           <select
             value={assetCode}
             onChange={(e) => setAssetCode(e.target.value)}
-            className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-white/30"
+            className="mt-1 w-full cursor-pointer rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 text-sm text-white outline-none transition-colors duration-150 hover:border-white/20 focus:border-white/25"
           >
             {SETTLEMENT_ASSETS.map((a) => (
-              <option key={a.code} value={a.code}>
+              <option key={a.code} value={a.code} className="bg-zinc-900 text-white">
                 {a.label}
               </option>
             ))}
@@ -482,7 +489,7 @@ function Sep31Panel({ anchorDomain, publicKey, token, lockedQuote, kycStatus, on
       {lockedQuote && <p className="text-[11px] text-zinc-600">Using locked quote {lockedQuote.id}</p>}
 
       {lockedQuote && quoteExpired && (
-        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
+        <div className="animate-fade-in rounded-xl border border-amber-500/30 bg-amber-500/10 p-3">
           <p className="text-xs font-semibold text-amber-300">Quote expired</p>
           <p className="mt-1 text-[11px] text-amber-200/80">
             Return to the rate calculator and lock a fresh quote before sending.
@@ -493,7 +500,7 @@ function Sep31Panel({ anchorDomain, publicKey, token, lockedQuote, kycStatus, on
       {kycRequired ? (
         <button
           onClick={onOpenKyc}
-          className="rounded-lg border border-amber-400/40 bg-amber-400/10 px-4 py-2.5 text-sm font-semibold text-amber-200 transition-colors hover:bg-amber-400/20"
+          className="rounded-xl border border-amber-400/40 bg-amber-400/10 px-4 py-2.5 text-sm font-semibold text-amber-200 transition-all duration-150 hover:bg-amber-400/20 active:scale-[0.98]"
         >
           Complete SEP-12 KYC to enable sending
         </button>
@@ -501,8 +508,9 @@ function Sep31Panel({ anchorDomain, publicKey, token, lockedQuote, kycStatus, on
         <button
           onClick={send}
           disabled={loading || (lockedQuote != null && quoteExpired)}
-          className="rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-black transition-colors hover:bg-zinc-200 disabled:opacity-50"
+          className="flex items-center justify-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-black transition-all duration-150 hover:bg-zinc-100 active:scale-[0.98] disabled:opacity-60 disabled:active:scale-100"
         >
+          {loading && <Spinner className="h-3.5 w-3.5 text-black" />}
           {loading ? "Sending…" : "Send via SEP-31"}
         </button>
       )}
@@ -514,14 +522,14 @@ function Sep31Panel({ anchorDomain, publicKey, token, lockedQuote, kycStatus, on
       </p>
 
       {error && (
-        <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3">
+        <div className="animate-fade-in rounded-xl border border-red-500/30 bg-red-500/10 p-3">
           <p className="text-xs text-red-400">{error}</p>
           <button
             onClick={() => {
               setError(null);
               onFlowError(null);
             }}
-            className="mt-2 text-[11px] font-semibold text-red-300 underline"
+            className="mt-2 text-[11px] font-semibold text-red-300 underline decoration-red-300/40 underline-offset-2 transition-colors hover:text-red-200"
           >
             Dismiss and try again
           </button>
@@ -529,11 +537,11 @@ function Sep31Panel({ anchorDomain, publicKey, token, lockedQuote, kycStatus, on
       )}
 
       {result && (
-        <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3 text-xs text-zinc-300">
+        <div className="animate-fade-in rounded-xl border border-emerald-500/20 bg-emerald-500/[0.06] p-3 text-xs text-zinc-300">
           <p className="text-zinc-500">Transaction created</p>
-          <p className="mt-1 font-mono">{result.id}</p>
+          <p className="mt-1 truncate font-mono">{result.id}</p>
           {result.stellar_account_id && (
-            <p className="mt-1">
+            <p className="mt-1 break-all">
               Settling to <span className="font-mono text-emerald-300">{result.stellar_account_id}</span>
               {result.stellar_memo && (
                 <>
@@ -547,11 +555,14 @@ function Sep31Panel({ anchorDomain, publicKey, token, lockedQuote, kycStatus, on
       )}
 
       {result && trustlineRequiredForPayment && trustlineStatus === "checking" && (
-        <p className="text-[11px] text-zinc-500">Checking whether this account trusts {assetCode}…</p>
+        <p className="flex items-center gap-2 text-[11px] text-zinc-500">
+          <Spinner className="h-3 w-3 text-zinc-500" />
+          Checking whether this account trusts {assetCode}…
+        </p>
       )}
 
       {result && trustlineRequiredForPayment && trustlineStatus === "missing" && !flowError && (
-        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
+        <div className="animate-fade-in rounded-xl border border-amber-500/30 bg-amber-500/10 p-3">
           <p className="text-xs font-semibold text-amber-300">Trustline required before paying</p>
           <p className="mt-1 text-[11px] leading-relaxed text-amber-200/80">
             This account has no trustline to {assetCode} yet. Establishing it only asks Freighter to sign a
@@ -561,8 +572,9 @@ function Sep31Panel({ anchorDomain, publicKey, token, lockedQuote, kycStatus, on
           <button
             onClick={establishTrustline}
             disabled={establishingTrustline}
-            className="mt-3 rounded-lg border border-amber-400/40 bg-amber-400/10 px-3 py-1.5 text-xs font-semibold text-amber-200 transition-colors hover:bg-amber-400/20 disabled:opacity-50"
+            className="mt-3 flex items-center gap-2 rounded-lg border border-amber-400/40 bg-amber-400/10 px-3 py-1.5 text-xs font-semibold text-amber-200 transition-all duration-150 hover:bg-amber-400/20 active:scale-[0.98] disabled:opacity-50"
           >
+            {establishingTrustline && <Spinner className="h-3 w-3 text-amber-200" />}
             {establishingTrustline ? "Waiting for Freighter signature…" : `Establish trustline for ${assetCode}`}
           </button>
         </div>
@@ -576,8 +588,9 @@ function Sep31Panel({ anchorDomain, publicKey, token, lockedQuote, kycStatus, on
         <button
           onClick={payNow}
           disabled={paying}
-          className="rounded-lg bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-black transition-colors hover:bg-emerald-400 disabled:opacity-50"
+          className="flex items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-black shadow-[0_0_18px_-6px_rgba(16,185,129,0.6)] transition-all duration-150 hover:bg-emerald-400 active:scale-[0.98] disabled:opacity-60 disabled:active:scale-100"
         >
+          {paying && <Spinner className="h-3.5 w-3.5 text-black" />}
           {paying ? "Waiting for Freighter signature…" : "Pay with Freighter"}
         </button>
       )}
@@ -592,7 +605,7 @@ function Sep31Panel({ anchorDomain, publicKey, token, lockedQuote, kycStatus, on
       {flowError && <PaymentFlowErrorCard error={flowError} busy={paying || establishingTrustline} />}
 
       {paymentTxHash && (
-        <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3 text-xs text-zinc-300">
+        <div className="animate-fade-in rounded-xl border border-emerald-500/20 bg-emerald-500/[0.06] p-3 text-xs text-zinc-300">
           <p className="font-semibold text-emerald-300">✓ Payment submitted from your wallet</p>
           <p className="mt-1 break-all font-mono text-[11px] text-zinc-400">{paymentTxHash}</p>
           <p className="mt-1 text-[11px] text-zinc-600">Waiting for the anchor to detect and confirm it below.</p>
@@ -600,11 +613,11 @@ function Sep31Panel({ anchorDomain, publicKey, token, lockedQuote, kycStatus, on
       )}
 
       {status && (
-        <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3">
+        <div className="animate-fade-in rounded-xl border border-emerald-500/20 bg-emerald-500/[0.06] p-3">
           <p className="text-xs text-zinc-500">Live transaction status</p>
           <p className="mt-1 text-sm font-semibold text-emerald-300">{status.status}</p>
           {status.stellar_transaction_id && (
-            <div className="mt-2 border-t border-white/10 pt-2">
+            <div className="mt-2 border-t border-white/[0.08] pt-2">
               <p className="text-[11px] font-semibold text-emerald-300">✓ Settlement payment confirmed on-chain</p>
               <p className="mt-1 break-all font-mono text-[11px] text-zinc-400">{status.stellar_transaction_id}</p>
             </div>

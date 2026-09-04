@@ -91,11 +91,14 @@ export default function Home() {
   const quoteExpired = lockedQuote ? now >= new Date(lockedQuote.expires_at).getTime() : false;
 
   return (
-    <div className="flex flex-1 flex-col bg-black">
-      <header className="flex items-center justify-between border-b border-white/10 px-8 py-6">
-        <div className="flex items-center gap-2">
-          <span className="text-lg font-semibold tracking-tight">Ferry</span>
-          <span className="rounded-full border border-white/15 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-zinc-400">
+    <div className="flex flex-1 flex-col">
+      <header className="sticky top-0 z-40 flex items-center justify-between border-b border-white/[0.08] bg-black/40 px-8 py-5 backdrop-blur-xl">
+        <div className="flex items-center gap-2.5">
+          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-400 to-sky-500 text-sm font-bold text-black">
+            F
+          </span>
+          <span className="text-lg font-semibold tracking-tight text-white">Ferry</span>
+          <span className="rounded-full border border-white/15 bg-white/[0.04] px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-zinc-400">
             Testnet
           </span>
         </div>
@@ -103,8 +106,12 @@ export default function Home() {
       </header>
 
       <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-8 px-8 py-16">
-        <div>
-          <h1 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">
+        <div className="animate-fade-in">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-400/20 bg-emerald-400/[0.06] px-3 py-1 text-[11px] font-medium text-emerald-300">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+            Non-custodial · Stellar Testnet
+          </span>
+          <h1 className="mt-4 bg-gradient-to-b from-white to-zinc-400 bg-clip-text text-3xl font-semibold tracking-tight text-transparent sm:text-4xl">
             EUR → TRY remittances, orchestrated&nbsp;— never custodied.
           </h1>
           <p className="mt-3 max-w-xl text-base leading-7 text-zinc-400">
@@ -170,7 +177,7 @@ export default function Home() {
         />
       )}
 
-      <footer className="border-t border-white/10 px-8 py-6 text-center text-xs text-zinc-600">
+      <footer className="border-t border-white/[0.08] px-8 py-6 text-center text-xs text-zinc-600">
         Stellar Testnet only · Non-custodial by design
       </footer>
     </div>

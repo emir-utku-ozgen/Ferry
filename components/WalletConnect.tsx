@@ -5,6 +5,7 @@ import { getNetworkDetails, isConnected, requestAccess, WatchWalletChanges } fro
 import { Networks } from "@stellar/stellar-sdk";
 import { freighterErrorMessage } from "@/lib/stellar/freighterError";
 import { NETWORK_PASSPHRASE } from "@/lib/stellar/config";
+import Spinner from "@/components/Spinner";
 
 interface WalletConnectProps {
   onConnect?: (publicKey: string) => void;
@@ -121,13 +122,16 @@ export default function WalletConnect({ onConnect, onDisconnect }: WalletConnect
     return (
       <div className="flex flex-col items-end gap-2">
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-4 py-2">
-            <span className="h-2 w-2 rounded-full bg-emerald-400" />
+          <div className="flex items-center gap-2 rounded-full border border-emerald-500/25 bg-emerald-500/[0.08] px-4 py-2 shadow-[0_0_16px_-4px_rgba(16,185,129,0.35)]">
+            <span className="relative flex h-2 w-2">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
+            </span>
             <span className="font-mono text-sm text-emerald-300">{truncateAddress(publicKey)}</span>
           </div>
           <button
             onClick={disconnect}
-            className="rounded-full border border-red-400/40 bg-red-400/10 px-4 py-2 text-sm font-semibold text-red-200 transition-colors hover:bg-red-400/20"
+            className="rounded-full border border-red-400/30 bg-red-400/[0.06] px-4 py-2 text-sm font-semibold text-red-200 transition-all duration-150 hover:border-red-400/50 hover:bg-red-400/15 active:scale-[0.97]"
           >
             Disconnect Wallet
           </button>
@@ -142,8 +146,9 @@ export default function WalletConnect({ onConnect, onDisconnect }: WalletConnect
       <button
         onClick={connect}
         disabled={connecting}
-        className="rounded-full bg-white px-5 py-2.5 text-sm font-semibold text-black transition-colors hover:bg-zinc-200 disabled:opacity-50"
+        className="flex items-center gap-2 rounded-full bg-white px-5 py-2.5 text-sm font-semibold text-black shadow-[0_0_20px_-6px_rgba(255,255,255,0.4)] transition-all duration-150 hover:bg-zinc-100 active:scale-[0.97] disabled:opacity-60 disabled:active:scale-100"
       >
+        {connecting && <Spinner className="h-3.5 w-3.5 text-black" />}
         {connecting ? "Connecting…" : "Connect Freighter Wallet"}
       </button>
       {error && <p className="max-w-xs text-right text-xs text-red-400">{error}</p>}

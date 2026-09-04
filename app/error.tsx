@@ -22,9 +22,11 @@ export default function GlobalError({ error, reset }: { error: Error & { digest?
   }, [error]);
 
   return (
-    <div className="flex min-h-full flex-1 flex-col items-center justify-center gap-4 bg-black px-8 py-16 text-center text-white">
-      <span className="text-lg font-semibold tracking-tight">Ferry</span>
-      <div className="max-w-md rounded-2xl border border-red-500/30 bg-red-500/10 p-6">
+    <div className="flex min-h-full flex-1 flex-col items-center justify-center gap-4 px-8 py-16 text-center text-white">
+      <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-400 to-sky-500 text-sm font-bold text-black">
+        F
+      </span>
+      <div className="max-w-md rounded-2xl border border-red-500/30 bg-red-500/10 p-6 backdrop-blur-xl">
         <p className="text-sm font-semibold text-red-300">Something went wrong</p>
         <p className="mt-2 text-[13px] leading-relaxed text-red-200/80">
           This wasn&apos;t one of the anticipated failure states — it&apos;s an unexpected error in the app itself.
@@ -33,7 +35,7 @@ export default function GlobalError({ error, reset }: { error: Error & { digest?
         {error.digest && <p className="mt-3 font-mono text-[11px] text-red-300/60">Reference: {error.digest}</p>}
         <button
           onClick={reset}
-          className="mt-4 rounded-lg border border-red-400/40 bg-red-400/10 px-4 py-2 text-xs font-semibold text-red-200 transition-colors hover:bg-red-400/20"
+          className="mt-4 rounded-lg border border-red-400/40 bg-red-400/10 px-4 py-2 text-xs font-semibold text-red-200 transition-all duration-150 hover:bg-red-400/20 active:scale-[0.98]"
         >
           Try again
         </button>

@@ -9,6 +9,7 @@ import {
 } from "@/lib/stellar/client/sep12Client";
 import { validateIban } from "@/lib/iban";
 import type { FlowError } from "@/components/StatusTracker";
+import Spinner from "@/components/Spinner";
 
 interface KycModalProps {
   anchorDomain: string;
@@ -105,11 +106,19 @@ export default function KycModal({
   const bankFields = BANK_FIELD_ORDER.filter((key) => key in fields);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" role="dialog" aria-modal="true">
-      <div className="w-full max-w-md rounded-2xl border border-white/10 bg-zinc-950 p-6 shadow-2xl">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+    >
+      <div className="animate-fade-in w-full max-w-md rounded-2xl border border-white/10 bg-zinc-950/90 p-6 shadow-2xl shadow-black/60 backdrop-blur-xl">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-400">SEP-12 Customer Info</h2>
-          <button onClick={onClose} className="text-zinc-500 hover:text-zinc-300" aria-label="Close">
+          <button
+            onClick={onClose}
+            className="flex h-7 w-7 items-center justify-center rounded-full text-zinc-500 transition-colors duration-150 hover:bg-white/5 hover:text-zinc-300"
+            aria-label="Close"
+          >
             ✕
           </button>
         </div>
@@ -119,12 +128,18 @@ export default function KycModal({
           anchor&apos;s KYC service ({anchorDomain}) — Ferry relays it and stores none of it.
         </p>
 
-        {loading && <p className="mt-4 text-xs text-zinc-500">Loading requirements…</p>}
+        {loading && (
+          <div className="mt-4 flex flex-col gap-2">
+            <div className="h-9 animate-shimmer rounded-xl" />
+            <div className="h-9 animate-shimmer rounded-xl" />
+            <div className="h-9 w-2/3 animate-shimmer rounded-xl" />
+          </div>
+        )}
 
         {!loading && customer && (
           <>
             {customer.status === "ACCEPTED" ? (
-              <div className="mt-4 rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3">
+              <div className="animate-fade-in mt-4 rounded-xl border border-emerald-500/20 bg-emerald-500/[0.06] p-3">
                 <p className="text-sm font-semibold text-emerald-300">KYC verified</p>
                 <p className="mt-1 text-xs text-zinc-500">This account is cleared to send a SEP-31 payment.</p>
               </div>
@@ -144,7 +159,7 @@ export default function KycModal({
                 </div>
 
                 {bankFields.length > 0 && (
-                  <div className="flex flex-col gap-3 border-t border-white/10 pt-4">
+                  <div className="flex flex-col gap-3 border-t border-white/[0.08] pt-4">
                     <p className="text-xs font-semibold text-zinc-400">Bank / IBAN details (recipient payout)</p>
                     {bankFields.map((key) => (
                       <FieldInput
@@ -170,8 +185,9 @@ export default function KycModal({
                 <button
                   onClick={submit}
                   disabled={submitting}
-                  className="rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-black transition-colors hover:bg-zinc-200 disabled:opacity-50"
+                  className="flex items-center justify-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-black transition-all duration-150 hover:bg-zinc-100 active:scale-[0.98] disabled:opacity-60 disabled:active:scale-100"
                 >
+                  {submitting && <Spinner className="h-3.5 w-3.5 text-black" />}
                   {submitting ? "Submitting…" : "Submit KYC Details"}
                 </button>
               </div>
@@ -211,13 +227,13 @@ function FieldInput({
         <select
           value={value}
           onChange={(e) => onChange((prev) => ({ ...prev, [name]: e.target.value }))}
-          className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-white/30"
+          className="mt-1 w-full cursor-pointer rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 text-sm text-white outline-none transition-colors duration-150 hover:border-white/20 focus:border-white/25 focus:bg-black/30"
         >
           <option value="" disabled>
             Select…
           </option>
           {field.choices.map((choice) => (
-            <option key={choice} value={choice}>
+            <option key={choice} value={choice} className="bg-zinc-900 text-white">
               {choice}
             </option>
           ))}
@@ -228,7 +244,7 @@ function FieldInput({
           value={value}
           placeholder={field.description}
           onChange={(e) => onChange((prev) => ({ ...prev, [name]: e.target.value }))}
-          className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-white/30"
+          className="mt-1 w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 text-sm text-white outline-none transition-colors duration-150 focus:border-white/25 focus:bg-black/30"
         />
       )}
       {validation && (

@@ -143,23 +143,24 @@ export default function StatusTracker({
   }, [transferId]);
 
   return (
-    <div className="w-full rounded-2xl border border-white/10 bg-white/[0.03] p-6">
+    <div className="w-full rounded-2xl border border-white/[0.08] bg-white/[0.03] p-6 shadow-2xl shadow-black/40 backdrop-blur-xl transition-colors duration-200 hover:border-white/[0.12]">
       <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-400">Transfer Status</h2>
 
-      <ol className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-2">
+      <ol className="relative mt-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-2">
+        <div className="absolute left-3 right-3 top-3 hidden h-px bg-white/[0.08] sm:block" aria-hidden />
         {STEPS.map((step, i) => {
           const state = error ? "blocked" : i < currentIndex ? "done" : i === currentIndex ? "active" : "pending";
           return (
-            <li key={step.key} className="flex flex-1 items-center gap-3 sm:flex-col sm:items-center sm:text-center">
+            <li key={step.key} className="relative flex flex-1 items-center gap-3 sm:flex-col sm:items-center sm:text-center">
               <span
-                className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
+                className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-zinc-950 text-xs font-semibold transition-all duration-300 ${
                   state === "done"
-                    ? "bg-emerald-500 text-black"
+                    ? "bg-emerald-500 text-black shadow-[0_0_12px_-2px_rgba(16,185,129,0.7)]"
                     : state === "active"
-                      ? "border border-white text-white"
+                      ? "border border-white text-white shadow-[0_0_10px_-2px_rgba(255,255,255,0.5)]"
                       : state === "blocked"
                         ? "border border-red-500/50 text-red-400"
-                        : "border border-white/20 text-zinc-600"
+                        : "border border-white/15 text-zinc-600"
                 }`}
               >
                 {state === "done" ? "✓" : i + 1}
@@ -173,18 +174,18 @@ export default function StatusTracker({
       </ol>
 
       {hasQuote && quoteExpired && !error && (
-        <div className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
+        <div className="animate-fade-in mt-4 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3">
           <p className="text-xs font-semibold text-amber-300">Locked quote has expired</p>
           <p className="mt-1 text-[11px] text-amber-200/80">Lock a fresh quote before starting a deposit or payment.</p>
         </div>
       )}
 
       {error && (
-        <div className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 p-4">
+        <div className="animate-fade-in mt-4 rounded-xl border border-red-500/30 bg-red-500/10 p-4">
           <p className="text-sm font-semibold text-red-300">{ERROR_COPY[error.type].title}</p>
           <p className="mt-1 text-[11px] leading-relaxed text-red-200/80">{ERROR_COPY[error.type].hint}</p>
-          <p className="mt-2 rounded bg-black/30 p-2 font-mono text-[11px] text-red-300/90">{error.message}</p>
-          <div className="mt-3 flex items-start gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-2.5">
+          <p className="mt-2 rounded-lg bg-black/30 p-2 font-mono text-[11px] text-red-300/90">{error.message}</p>
+          <div className="mt-3 flex items-start gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/[0.06] p-2.5">
             <span className="mt-0.5 shrink-0 text-emerald-400" aria-hidden>
               ✓
             </span>
@@ -196,7 +197,7 @@ export default function StatusTracker({
           {onDismissError && (
             <button
               onClick={onDismissError}
-              className="mt-3 rounded-lg border border-red-400/40 bg-red-400/10 px-3 py-1.5 text-xs font-semibold text-red-200 transition-colors hover:bg-red-400/20"
+              className="mt-3 rounded-lg border border-red-400/40 bg-red-400/10 px-3 py-1.5 text-xs font-semibold text-red-200 transition-all duration-150 hover:bg-red-400/20 active:scale-[0.98]"
             >
               Dismiss and try again
             </button>
@@ -205,7 +206,7 @@ export default function StatusTracker({
       )}
 
       {transferId && auditEvents.length > 0 && (
-        <div className="mt-4 border-t border-white/10 pt-4">
+        <div className="animate-fade-in mt-4 border-t border-white/[0.08] pt-4">
           <p className="text-xs font-semibold text-zinc-400">Audit trail · {transferId}</p>
           <ol className="mt-2 flex flex-col gap-1.5">
             {auditEvents.map((e, i) => (

@@ -1,6 +1,9 @@
 export default function NonCustodialNotice() {
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+    <div className="flex items-start gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.02] p-4 backdrop-blur-xl">
+      <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-sky-400/30 bg-sky-400/10 text-[11px] text-sky-300" aria-hidden>
+        i
+      </span>
       <p className="text-xs leading-relaxed text-zinc-400">
         <span className="font-semibold text-zinc-200">Freighter is a Testnet signing tool, not a crypto wallet for
         the sender or recipient.</span> On this corridor, the sender pays in EUR and the recipient is paid out in
