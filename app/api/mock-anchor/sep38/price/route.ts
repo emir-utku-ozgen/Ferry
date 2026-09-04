@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  const tryIssuerKeypair = await getTryIssuerKeypair();
+  const tryIssuerKeypair = getTryIssuerKeypair();
   if (sellAsset !== `stellar:EURC:${EURC_ISSUER}` || buyAsset !== `stellar:TRY:${tryIssuerKeypair.publicKey()}`) {
     return NextResponse.json(
       { error: "sell_asset or buy_asset not found — this mock anchor only quotes EURC -> TRY" },

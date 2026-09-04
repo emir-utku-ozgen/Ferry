@@ -27,7 +27,7 @@ export async function checkAndSettleTransaction(tx: MockTransaction): Promise<vo
   if (tx.status !== "pending_receiver") return;
 
   try {
-    const signingKeypair = await getSigningKeypair();
+    const signingKeypair = getSigningKeypair();
     const server = getHorizonServer();
     const payments = await server.payments().forAccount(signingKeypair.publicKey()).order("desc").limit(20).call();
 

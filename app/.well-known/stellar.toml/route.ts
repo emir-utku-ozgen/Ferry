@@ -16,10 +16,18 @@ import { EURC_ISSUER, getSigningKeypair, getTryIssuerKeypair, resolveMockAnchorB
  * routing instead of a bare Express server's root-level routes.
  */
 export async function GET(req: NextRequest) {
-  const base = resolveMockAnchorBaseUrl(req);
-  const [signingKeypair, tryIssuerKeypair] = await Promise.all([getSigningKeypair(), getTryIssuerKeypair()]);
+  // Key loading is synchronous and never throws (see lib/mockAnchor/config.ts)
+  // — this route deliberately does no Horizon/Friendbot I/O of its own, so
+  // toml resolution can't be taken down by an unrelated funding/trustline
+  // hiccup. This try/catch is defense in depth for anything still
+  // unanticipated, so a bug here surfaces as a diagnosable 500 body instead
+  // of Next's opaque, empty one.
+  try {
+    const base = resolveMockAnchorBaseUrl(req);
+    const signingKeypair = getSigningKeypair();
+    const tryIssuerKeypair = getTryIssuerKeypair();
 
-  const toml = `VERSION="2.7.0"
+    const toml = `VERSION="2.7.0"
 NETWORK_PASSPHRASE="${Networks.TESTNET}"
 SIGNING_KEY="${signingKeypair.publicKey()}"
 WEB_AUTH_ENDPOINT="${base}/api/mock-anchor/auth"
@@ -48,5 +56,12 @@ anchor_asset="TRY"
 desc="MOCK / SIMULATED representation of Turkish Lira. Not backed by any bank, not a real anchor. Exists only so this embedded test harness has a Stellar asset to quote and settle against."
 `;
 
-  return new NextResponse(toml, { headers: { "Content-Type": "text/plain; charset=utf-8" } });
+    return new NextResponse(toml, { headers: { "Content-Type": "text/plain; charset=utf-8" } });
+  } catch (err) {
+    console.error("[mock-anchor] /.well-known/stellar.toml failed unexpectedly:", err);
+    return NextResponse.json(
+      { error: `Failed to build stellar.toml: ${err instanceof Error ? err.message : String(err)}` },
+      { status: 500 }
+    );
+  }
 }

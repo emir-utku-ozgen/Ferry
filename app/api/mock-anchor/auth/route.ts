@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
   if (!account) return NextResponse.json({ error: "`account` is required" }, { status: 400 });
 
   try {
-    const signingKeypair = await getSigningKeypair();
+    const signingKeypair = getSigningKeypair();
     const homeDomain = homeDomainFor(req);
     const transaction = WebAuth.buildChallengeTx(
       signingKeypair,
@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
   if (!transaction) return NextResponse.json({ error: "`transaction` is required" }, { status: 400 });
 
   try {
-    const signingKeypair = await getSigningKeypair();
+    const signingKeypair = getSigningKeypair();
     const homeDomain = homeDomainFor(req);
     const { clientAccountID } = WebAuth.readChallengeTx(
       transaction,

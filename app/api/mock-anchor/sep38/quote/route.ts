@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
   }
   const { sell_asset: sellAsset, buy_asset: buyAsset, sell_amount: sellAmountParam, buy_amount: buyAmountParam } = body;
 
-  const tryIssuerKeypair = await getTryIssuerKeypair();
+  const tryIssuerKeypair = getTryIssuerKeypair();
   if (sellAsset !== `stellar:EURC:${EURC_ISSUER}` || buyAsset !== `stellar:TRY:${tryIssuerKeypair.publicKey()}`) {
     return NextResponse.json(
       { error: "sell_asset or buy_asset not found — this mock anchor only quotes EURC -> TRY" },

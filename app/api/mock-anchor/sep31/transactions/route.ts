@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkRateLimit, rateLimitResponse } from "@/lib/rateLimit";
 import { verifyBearerToken } from "@/lib/mockAnchor/auth";
-import { amountOutOfRange, getSigningKeypair, MIN_EURC_AMOUNT, MAX_EURC_AMOUNT } from "@/lib/mockAnchor/config";
+import { amountOutOfRange, ensureSigningAccountFunded, getSigningKeypair, MIN_EURC_AMOUNT, MAX_EURC_AMOUNT } from "@/lib/mockAnchor/config";
 import { customerKey, customers, quotes, transactions, type MockTransaction } from "@/lib/mockAnchor/state";
 import { isQuoteExpired } from "@/lib/mockAnchor/settlement";
 
@@ -61,7 +61,24 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const signingKeypair = await getSigningKeypair();
+  // Actually needs the receiving account to exist and trust EURC before
+  // it's usable as a settlement destination — the one step in this route
+  // that does real network I/O and can genuinely fail (Friendbot down,
+  // Horizon slow). Checked here, at creation time, so a problem surfaces
+  // as one clear, retryable error now rather than a confusing payment
+  // failure later when the sender actually tries to pay this account.
+  const readiness = await ensureSigningAccountFunded();
+  if (!readiness.fundedAndTrusting) {
+    return NextResponse.json(
+      {
+        error: "receiving_account_not_ready",
+        message: `This mock anchor's settlement account isn't ready yet: ${readiness.reason}. Try again in a few seconds.`,
+      },
+      { status: 503 }
+    );
+  }
+
+  const signingKeypair = getSigningKeypair();
   const id = Math.random().toString(36).slice(2, 10); // short — fits as a Stellar text memo
   const tx: MockTransaction = {
     id,
