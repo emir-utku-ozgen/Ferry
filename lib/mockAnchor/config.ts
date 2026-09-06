@@ -33,26 +33,48 @@ export function amountOutOfRange(amount: number): boolean {
 
 export { EURC_ISSUER };
 
+function protoFor(hostname: string, forwardedProto: string | null): string {
+  if (forwardedProto) return forwardedProto.split(",")[0].trim();
+  return isLocalHostname(hostname) ? "http" : "https";
+}
+
 /**
  * Resolves the base URL this instance is actually reachable at, for
  * building stellar.toml's advertised SEP endpoint URLs.
  *
- * `NEXT_PUBLIC_APP_URL` alone isn't reliable for this on a preview/staging
- * Vercel deployment (a different URL per deployment) unless explicitly set
- * per-environment — so the request's own `Host` / `X-Forwarded-Proto`
- * headers (what the edge that terminated *this* request actually reports)
- * are the self-correcting fallback, same reasoning as
- * mock-anchor/publicBaseUrl.js.
+ * Prefers the incoming request's own `Host` header — this needs no
+ * environment variable at all, is always present on a real HTTP request,
+ * and is exactly "what domain was this request addressed to," which is
+ * precisely what's needed here. `NEXT_PUBLIC_APP_URL` was tried first in
+ * an earlier version of this function; on one real deployment it
+ * persistently resolved to a corrupted value (wrapped as
+ * `[https://...](https://...)`) across multiple dashboard edits,
+ * deletions, and cache-free rebuilds, for a reason never fully explained
+ * from here — Vercel's own automatically-populated variables
+ * (`VERCEL_PROJECT_PRODUCTION_URL`/`VERCEL_URL`) and the request's own
+ * headers were verified clean throughout that same debugging session
+ * (see git history around 2026-09), which is why they're trusted first
+ * below instead.
  */
 export function resolveMockAnchorBaseUrl(req: NextRequest): string {
+  const host = req.headers.get("host");
+  if (host) {
+    const trimmedHost = host.trim();
+    const hostname = trimmedHost.split(":")[0];
+    return `${protoFor(hostname, req.headers.get("x-forwarded-proto"))}://${trimmedHost}`;
+  }
+
+  // No Host header at all shouldn't happen for a real HTTP request — this
+  // is a last-resort fallback chain, in the same reliability order as
+  // above: Vercel's own automatic variables before an operator-set
+  // NEXT_PUBLIC_APP_URL.
+  const prodUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL;
+  if (prodUrl) return `https://${prodUrl.trim().replace(/\/+$/, "")}`;
+  const vercelUrl = process.env.VERCEL_URL;
+  if (vercelUrl) return `https://${vercelUrl.trim().replace(/\/+$/, "")}`;
   const explicit = process.env.NEXT_PUBLIC_APP_URL;
   if (explicit) return explicit.trim().replace(/\/+$/, "");
-
-  const host = (req.headers.get("host") || HOME_DOMAIN).trim();
-  const hostname = host.split(":")[0];
-  const forwardedProto = req.headers.get("x-forwarded-proto");
-  const proto = forwardedProto ? forwardedProto.split(",")[0].trim() : isLocalHostname(hostname) ? "http" : "https";
-  return `${proto}://${host}`;
+  return `${protoFor(HOME_DOMAIN, null)}://${HOME_DOMAIN}`;
 }
 
 /**

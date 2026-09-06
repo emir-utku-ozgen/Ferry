@@ -72,20 +72,26 @@ export const EMBEDDED_MOCK_ANCHOR_ENABLED =
 /**
  * The domain this deployment is reachable at, used only as
  * EMBEDDED_MOCK_ANCHOR_ENABLED's own default anchor domain below — an
- * explicit `NEXT_PUBLIC_ANCHOR_DOMAIN` always overrides this. Prefers an
- * explicitly-set `NEXT_PUBLIC_APP_URL`, then Vercel's automatically
- * populated `VERCEL_PROJECT_PRODUCTION_URL` (the assigned production
- * alias — set on Production deployments specifically), then `VERCEL_URL`
- * (the current deployment's own unique URL, always set on Vercel), then
- * falls back to HOME_DOMAIN for local dev.
+ * explicit `NEXT_PUBLIC_ANCHOR_DOMAIN` always overrides this. Prefers
+ * Vercel's own automatically populated `VERCEL_PROJECT_PRODUCTION_URL`
+ * (the assigned production alias) and `VERCEL_URL` (the current
+ * deployment's own unique URL) over an operator-set `NEXT_PUBLIC_APP_URL`
+ * — deliberately, not merely for simplicity: on one real deployment,
+ * `NEXT_PUBLIC_APP_URL` persistently resolved to a corrupted value
+ * (wrapped as `[https://...](https://...)`) across multiple dashboard
+ * edits and cache-free rebuilds, for a reason never fully explained,
+ * while Vercel's own variables stayed verified-clean throughout (see git
+ * history around 2026-09, and lib/mockAnchor/config.ts's
+ * resolveMockAnchorBaseUrl() which hit the same issue). Falls back to
+ * HOME_DOMAIN for local dev, where none of the VERCEL_* vars exist.
  */
 function embeddedAnchorSelfDomain(): string {
-  const explicitAppUrl = process.env.NEXT_PUBLIC_APP_URL;
-  if (explicitAppUrl) return explicitAppUrl.trim().replace(/^https?:\/\//i, "").replace(/\/+$/, "");
   const prodUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL;
   if (prodUrl) return prodUrl.trim().replace(/\/+$/, "");
   const vercelUrl = process.env.VERCEL_URL;
   if (vercelUrl) return vercelUrl.trim().replace(/\/+$/, "");
+  const explicitAppUrl = process.env.NEXT_PUBLIC_APP_URL;
+  if (explicitAppUrl) return explicitAppUrl.trim().replace(/^https?:\/\//i, "").replace(/\/+$/, "");
   return HOME_DOMAIN;
 }
 
