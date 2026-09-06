@@ -231,6 +231,84 @@ Required amount:     10 EURC
 
 ---
 
+## 10. Embedded Mock Anchor — Live Vercel Deployment Run (2026-09-06)
+
+Run against `https://ferry-kappa-ten.vercel.app` — Ferry's own production deployment, acting as its own anchor via `app/api/mock-anchor/*` and `app/.well-known/stellar.toml` (the embedded port of `mock-anchor/`, added this session specifically because `testanchor.stellar.org`'s SEP-31 endpoint is broken and `mock-anchor/`'s own standalone Express process has nowhere to run on Vercel's serverless model — see `GAP_ANALYSIS.md` and `docs/RUNBOOK.md` §2.0.1). Every request below went through Ferry's real `/api/sep{10,12,38,31}/*` orchestrator routes exactly as the browser UI would call them — not the mock anchor's routes directly — so this is evidence for the full stack, not just the mock anchor in isolation.
+
+### 10.1 A real bug found and fixed mid-verification
+
+`stellar.toml`'s endpoint URLs (`WEB_AUTH_ENDPOINT`, `DIRECT_PAYMENT_SERVER`, etc.) were intermittently served wrapped as `[https://ferry-kappa-ten.vercel.app](https://ferry-kappa-ten.vercel.app)/...` instead of a plain URL — confirmed real (not a rendering artifact) via three independent fetch paths returning identical bytes, and via a temporary debug endpoint that echoed the raw environment variable directly. This broke `new URL()` inside SEP-10 challenge resolution (`Invalid URL`), blocking the entire flow. Root cause: `resolveMockAnchorBaseUrl()` used "first truthy env var wins" priority, checking `NEXT_PUBLIC_APP_URL` first — and on this specific deployment, that variable persistently held the corrupted value across multiple dashboard edits, a full deletion, and cache-free rebuilds, for a reason never fully pinned down. Vercel's own automatically-populated `VERCEL_PROJECT_PRODUCTION_URL`/`VERCEL_URL` and the live request's own `Host` header stayed verified-clean throughout. Fixed by reordering priority to trust the request's own `Host` header first, falling back to Vercel's own variables before an operator-set override (`lib/mockAnchor/config.ts`, `lib/stellar/config.ts` — commit `44938d8`). Verified locally by deliberately reproducing the exact poisoned value and confirming clean resolution, then confirmed live below.
+
+### 10.2 Test account
+
+```
+Account:            GBIWJ73HG6WEWHZ5N6S57SIL6UXSTNTSDVY4RTGBL2Q5KVODOAOKHHJY
+Friendbot funding:  39b036620f25bbeb0eec4054c36f981fe52b433f5a6a92f2fd5036eee42ce02b
+EURC trustline tx:  d2c1465bfcc8441e8453565d2e13172e40540c687cdfb92e18bae2d7e11d94a0
+```
+
+Generated and signed by script (not Freighter) for this evidence run, same pattern as §9.1 — secret held only locally, Testnet-only, zero value.
+
+### 10.3 SEP-10 → SEP-38 → SEP-12 → SEP-31, all live through Ferry's own orchestrator against its own embedded anchor
+
+- **SEP-10**: `POST /api/sep10/challenge` (`domain=ferry-kappa-ten.vercel.app`) returned a valid challenge signed by the anchor's own key (`GDEOKXCPI35YJXZ7GSPTBT6CUC6LPECNFUHUWHPFBBW36TK3DI2AQK45`); signed locally and exchanged via `POST /api/sep10/token` for a JWT scoped to the account above.
+- **SEP-38 firm quote**: `POST /api/sep38/quote`, `sell_asset=stellar:EURC:GB3Q6QDZYTHWT7E5PVS3W7FUT5GVAFC5KSZFFLPU25GO7VTC3NM2ZTVO`, `buy_asset=stellar:TRY:<anchor's self-issued TRY, discovered via GET /api/anchor/currencies>`, `sell_amount=10`:
+  ```
+  Quote ID:    mockq_mtppla3bu3fs
+  Rate:        1 EURC = 44.5000000 TRY
+  Buy (net):   442.7750000 TRY
+  Fee:         0.05 EURC
+  Expires at:  2026-09-06T11:13:55.511Z
+  ```
+- **SEP-12**: `PUT {first_name: "Ada", last_name: "Lovelace", email_address: "ada@example.com"}` → `200 {"id": "GBIWJ73HG6WEWHZ5N6S57SIL6UXSTNTSDVY4RTGBL2Q5KVODOAOKHHJY"}` (accepted).
+- **SEP-31 create**: `POST /api/sep31/transactions` (`amount=10`, `asset_code=EURC`, `quote_id=mockq_mtppla3bu3fs`):
+  ```
+  Transaction ID:      n1gs3n5q
+  stellar_account_id:  GDEOKXCPI35YJXZ7GSPTBT6CUC6LPECNFUHUWHPFBBW36TK3DI2AQK45
+  stellar_memo_type:   text
+  stellar_memo:        n1gs3n5q
+  ```
+
+### 10.4 Real on-chain EURC payment, detected and settled — `completed`
+
+```
+Stellar transaction hash: 9ae604b13088fb33573820ff891b0ef197501fd74bb3905403b090a8f74206f6
+Ledger:                   4533916
+From:                     GBIWJ73HG6WEWHZ5N6S57SIL6UXSTNTSDVY4RTGBL2Q5KVODOAOKHHJY
+To:                       GDEOKXCPI35YJXZ7GSPTBT6CUC6LPECNFUHUWHPFBBW36TK3DI2AQK45
+Asset:                    EURC (GB3Q6QDZYTHWT7E5PVS3W7FUT5GVAFC5KSZFFLPU25GO7VTC3NM2ZTVO)
+Amount:                   10.0000000
+Memo:                     n1gs3n5q  (= the SEP-31 transaction id)
+successful:               true
+Explorer:                 https://stellar.expert/explorer/testnet/tx/9ae604b13088fb33573820ff891b0ef197501fd74bb3905403b090a8f74206f6
+```
+
+The very first status poll after submitting this payment (`GET /api/sep31/transactions?id=n1gs3n5q`, through Ferry's own orchestrator, hitting the embedded anchor's on-demand settlement check — see `lib/mockAnchor/checkSettlement.ts`) returned:
+
+```json
+{
+  "transaction": {
+    "id": "n1gs3n5q",
+    "status": "completed",
+    "quote_id": "mockq_mtppla3bu3fs",
+    "amount": "10.0000000",
+    "sender": "GBIWJ73HG6WEWHZ5N6S57SIL6UXSTNTSDVY4RTGBL2Q5KVODOAOKHHJY",
+    "received_amount": "10.0000000",
+    "stellar_transaction_id": "9ae604b13088fb33573820ff891b0ef197501fd74bb3905403b090a8f74206f6"
+  }
+}
+```
+
+`received_amount` exactly matches the invoiced `amount`, and `stellar_transaction_id` matches the hash above — confirmed by querying the endpoint directly, not by trusting a log line, same standard as §8.4/§9.5.
+
+**This closes the SEP-31 completion gap this document has tracked since §1**, this time against Ferry's own production Vercel deployment rather than a local process: the full SEP-10 → SEP-38 → SEP-12 → SEP-31 chain, run through Ferry's real orchestrator code against its own embedded anchor, produced one genuine, independently-verifiable, on-chain-settled transfer — checkable by anyone at `https://horizon-testnet.stellar.org/transactions/9ae604b13088fb33573820ff891b0ef197501fd74bb3905403b090a8f74206f6` or Stellar Expert, indefinitely.
+
+### 10.5 A known limitation, observed directly during this run
+
+Two transient artifacts appeared mid-run, both consistent with — not new instances of a bug beyond — the in-memory-state-per-serverless-instance limitation `lib/mockAnchor/state.ts`'s own docstring already flags: a standalone verification `GET /api/sep12/customer` call briefly reported `NEEDS_INFO` immediately after a successful `PUT` (a different, colder Vercel function instance not yet holding that record), and a separate standalone status poll returned `404 Transaction not found` for the same reason. Neither affected the actual flow above — the `PUT`/create/payment-poll sequence documented in §10.3–§10.4 landed on consistent instances throughout, and this is the expected result for a real user's single browser session (`TransferPanel.tsx` polls the same way, a few seconds apart, for the entire proximate flow). Recorded here rather than smoothed over, same standard as the rest of this document.
+
+---
+
 ## Failure scenarios requested but not genuinely reproducible against this anchor
 
 Being direct about this rather than inventing results:
