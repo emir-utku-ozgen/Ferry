@@ -27,6 +27,10 @@ Not all "key management" is about signing keys. Three other kinds of secret-shap
 | KYC field values (name, IBAN, bank details) | Personally identifying / financial data, not a cryptographic secret, but sensitive in the same way | Relayed through `/api/sep12/customer` straight to the anchor's own `KYC_SERVER`; never written to a database (there isn't one) | `lib/apiInstrumentation.ts`'s structured logging explicitly logs only route/status/timing/error metadata — field *values* are never included in a log line, by construction of what gets passed to `logger.info()`. |
 | `.env.local` values (anchor domains, Horizon URL, etc.) | Configuration, not secret in the traditional sense — no API keys or credentials are currently required by any integration | `.env.local`, gitignored; `.env.local.example` documents the shape without real values | No rotation needed today since nothing here is a credential. If a future anchor integration requires an API key (e.g. a private SEP-38 quote feed), it must go through env vars the same way, never a hardcoded literal — `CLAUDE.md`'s explicit instruction. |
 
+### 2.1 A secret that does exist today, not covered above: the embedded mock anchor's own keys
+
+§1's "Ferry holds no signing keys" is about the sender/recipient-facing orchestrator specifically. The **embedded mock anchor** (`app/api/mock-anchor/*`, enabled via `NEXT_PUBLIC_ENABLE_EMBEDDED_MOCK_ANCHOR`) is a different role — it *is* an anchor, in Testnet-toy form, and anchors do hold signing keys. `MOCK_ANCHOR_SIGNING_SECRET`, `MOCK_ANCHOR_TRY_ISSUER_SECRET`, and `MOCK_ANCHOR_JWT_SECRET` (`docs/RUNBOOK.md` §2.0.1) are real Stellar Testnet secret keys / a JWT-signing secret, currently stored as **Vercel encrypted environment variables** (Vercel's standard project-secret mechanism — encrypted at rest, injected into the function runtime, never present in the git history or build output) — the same storage class Vercel uses for every other env var in this deployment, there is no separate secrets manager in front of it today. This is an appropriate control for a Testnet development harness holding no real value; it is explicitly **not** the control this document would recommend for a production anchor's signing key (§3 below) if Ferry ever operated one for real.
+
 ## 3. If Ferry's scope changes to hold key material
 
 This section only becomes non-trivial if a future feature requires Ferry itself to hold a signing key — e.g. an automation service that needs to co-sign, or a custodial feature explicitly out of scope for the current non-custodial design. If that never happens, the honest answer stays "not applicable," and that decision should be recorded explicitly (see table below) rather than left ambiguous by omission.
@@ -39,6 +43,16 @@ This section only becomes non-trivial if a future feature requires Ferry itself 
 | If yes: key rotation policy and cadence | `[ ]` | `[ ]` |
 | If yes: who has access, under what approval process, and how access is revoked on personnel change | `[ ]` | `[ ]` |
 | If yes: incident procedure for suspected key compromise | `[ ]` | `[ ]` |
+
+### 3.1 Target custody architecture, if this becomes applicable
+
+This is a **proposed design for a future scenario, not a description of anything implemented** — included so the decision table above has a concrete option to accept, reject, or amend rather than an open-ended blank. It would apply if Ferry ever needs to hold a production Stellar signing key (e.g. running its own anchor for real, or an automation account that must co-sign) or a third-party API credential (e.g. a contracted anchor's private SEP-38 feed key):
+
+- **Stellar signing keys (if any):** custody in a managed KMS/HSM offering that supports Ed25519 (Stellar's signing curve) — e.g. cloud KMS with raw Ed25519 key support, or an MPC-based signing service — rather than a secret stored as a plain environment variable, once the key secures production value rather than Testnet demo state. The application would call a "sign this XDR" API and never hold the raw secret in process memory.
+- **API credentials / anchor auth secrets:** a secrets manager with audited access (HashiCorp Vault, or a cloud provider's equivalent — AWS Secrets Manager / GCP Secret Manager) with per-secret access policies, short-lived leases where the consuming service supports dynamic secrets, and an access-audit log distinct from Ferry's own application logs.
+- **Rotation:** credential rotation on a fixed cadence (not indefinitely long-lived), triggered automatically where the secrets manager supports it, with the anchor relationship's own key-rotation terms (if any) as an input to the cadence.
+- **Access control:** no engineer has standing production access to a raw secret value; access goes through the secrets manager's own audited retrieval path, scoped to the deploying CI/CD identity or a specific on-call role, not a personal credential.
+- **Why this isn't built today:** building this custody layer before a real key or credential exists to protect would be securing nothing — the decision table above should be answered "not applicable, verified `[date]`" for as long as §1 remains true, and this design adopted only once a specific yes-answer in the table above makes it necessary.
 
 ## 4. Adjacent items that belong here even though they're not "keys"
 

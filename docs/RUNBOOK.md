@@ -118,6 +118,48 @@ Two separate services, two separate hosts — they have different runtime requir
 - **Domain allowlist.** `lib/stellar/anchorAllowlist.ts` rejects any anchor domain not in `ANCHOR_ALLOWLIST` before any outbound request is made — this is Ferry's SSRF/open-relay guard, since every `/api/*` route otherwise accepts a client-supplied `domain`.
 - **Rate limiting, process-local.** `lib/rateLimit.ts` is a fixed-window counter per (route, client IP), held in an in-memory `Map` — bounds per-instance abuse but **does not** share state across a horizontally-scaled deployment.
 
+### 3.1 Structured log schema (real, as emitted today)
+
+Every field below is exactly what `lib/logger.ts`'s `emit()` writes — no field here is aspirational. One JSON object per line to stdout; `level` selects `console.log`/`console.warn`/`console.error` (informational vs. anchor-connectivity failure vs. threshold-crossing alert):
+
+```json
+{
+  "timestamp": "2026-09-06T14:22:31.104Z",
+  "level": "error",
+  "route": "sep31-create",
+  "event": "anchor.rejected",
+  "transferId": "n1gs3n5q",
+  "code": "ANCHOR_REJECTED",
+  "status": 400,
+  "durationMs": 812
+}
+```
+
+- `route` — the orchestrator route name (`sep10-challenge`, `sep10-token`, `sep12-customer`, `sep24-deposit`, `sep31-create`, …), set per call site.
+- `event` — a dot-namespaced event name (`anchor.rejected`, `anchor.timeout`, `alert.triggered`, `idempotency.replay`, …).
+- `transferId` — Ferry's correlation id for a transfer: the SEP-38 quote id, used consistently across `lib/auditTrail.ts` and `GET /api/audit/[transferId]` so a single id ties a quote, its KYC step, and its SEP-31 transaction together in the logs.
+- `code` — Ferry's own typed error code (`AnchorError`'s `code` field: `ANCHOR_TIMEOUT`, `ANCHOR_REJECTED`, `NETWORK_ERROR`, …), not the anchor's raw HTTP status alone.
+- `status` — the HTTP status Ferry's own route returned to the browser.
+- `durationMs` — wall-clock time for the anchor-facing call, the raw input an SLA/latency alert would key off.
+- **What this schema does not yet have:** a distinct request-scoped *trace id* separate from `transferId` (there's no multi-hop distributed trace today — each orchestrator call is a single hop to one anchor), and KYC field *values* are never included by construction (`lib/logger.ts`'s own header comment) — only route/status/timing/error metadata, consistent with the non-custodial identity claim holding for logs too.
+
+### 3.2 Alerting thresholds — current implementation vs. target production design
+
+**What's real today:** `lib/monitoring.ts` is an in-memory sliding-window counter, not Prometheus. It fires one structured `alert.triggered` log line the first time a given `route` crosses **5 failures within a trailing 5-minute window** (`FAILURE_THRESHOLD` / `WINDOW_MS`), re-arming once the rate drops back under threshold. Every route wrapped in `withInstrumentation()` and every `lib/rateLimit.ts` rejection feeds it automatically. `GET /api/health` reports `{ ok, alerts: string[] }` — `503` when any route is currently over threshold — as the one endpoint an external uptime check can poll.
+
+**What this is not yet:** connected to an actual metrics/alerting platform. There is no `/metrics` endpoint, no Prometheus client library in `package.json`, and no PromQL recording rules anywhere in this repository — stating otherwise would misrepresent the current build. The table below is a **target design**, not a shipped feature, for whoever wires up real alerting per `RUNBOOK.md` §5's open item:
+
+| Proposed metric | Type | Source (already logged) | Proposed alert threshold |
+|---|---|---|---|
+| `ferry_anchor_request_duration_ms` | Histogram, labeled by `route` | `durationMs` on every log line | p95 > 5s sustained 5 min → warn; p95 > 9s (near the 10s hard timeout) → page |
+| `ferry_anchor_rejections_total` | Counter, labeled by `route`, `code` | `event: "anchor.rejected"` | rejection rate > 10% of requests over 5 min → warn |
+| `ferry_anchor_timeouts_total` | Counter, labeled by `route` | `code: "ANCHOR_TIMEOUT"` | any sustained rate > 0 over 5 min → warn (a healthy anchor should not be timing out at all) |
+| `ferry_settlement_lag_seconds` | Histogram | time between SEP-31 transaction creation and `transferStatus` reaching `completed`, observable from `lib/auditTrail.ts` event timestamps but not currently exported as a metric | p95 exceeding the contracted anchor's own stated settlement SLA (`CORRIDOR_VERIFICATION.md` §3, not yet known) → warn |
+| `ferry_ratelimit_rejections_total` | Counter, labeled by `route` | `lib/rateLimit.ts` rejection events | sudden spike (>3x trailing 1hr baseline) → warn (possible abuse, not necessarily a Ferry-side failure) |
+| `ferry_idempotent_replay_total` | Counter | `X-Idempotent-Replay: true` responses | informational only — high volume suggests client-side retry storms worth investigating, not itself an incident |
+
+Every metric above is derivable from data Ferry already logs (§3.1) — adopting this table is an instrumentation/export task (e.g. a Prometheus client library reading the same `logger`/`monitoring` call sites, or shipping logs to a platform that derives metrics from structured JSON), not a redesign of what Ferry tracks.
+
 ## 4. Deployment
 
 Deploys currently go through the standard Next.js/Vercel git-integration flow (push to the tracked branch → build → deploy) — there is no custom CI/CD pipeline, canary process, or feature-flag system in this repository (`grep -rn "canary\|feature.flag" --include="*.ts" --include="*.tsx"` returns nothing). `npm run build` runs `next build`, which also runs the TypeScript compiler as part of the build (a build failure blocks deploy). `npm run lint` runs ESLint separately; it is not currently wired into the build itself.

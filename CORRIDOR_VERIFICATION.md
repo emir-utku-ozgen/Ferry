@@ -7,6 +7,22 @@
 
 ---
 
+## 0. Unified SEP Compliance Matrix (template)
+
+A single side-by-side view of both legs across all five SEPs Ferry's orchestrator speaks, consolidating the per-field prose in §1–§2 into one scannable table. Same status as the rest of §1–§4: template, not yet filled from a real anchor.
+
+| SEP | EUR-side anchor | TRY-side anchor | Verified via |
+|---|---|---|---|
+| SEP-10 (Web Auth) | `[ ]` | `[ ]` | anchor's `stellar.toml` → `WEB_AUTH_ENDPOINT` reachable, challenge/token round-trip succeeds |
+| SEP-12 (Customer Info / KYC) | `[ ]` | `[ ]` | `GET /customer` on the anchor's `KYC_SERVER` returns a real required-field list |
+| SEP-24 (Hosted Deposit/Withdrawal) | `[ ]` | `[ ]` | `stellar.toml` → `TRANSFER_SERVER_SEP0024`, `GET /info` lists supported assets |
+| SEP-31 (Cross-Border Payments) | `[ ]` | `[ ]` | `stellar.toml` → `DIRECT_PAYMENT_SERVER`, `GET /info` lists `receive` assets and required fields |
+| SEP-38 (Anchor Quotes) | `[ ]` | `[ ]` | `GET /price` for the `iso4217:EUR`↔corridor-asset pair returns a real (non-404) quote |
+
+**Endpoint latency** (p50 / p95, measured against the production anchor once contracted): `[ ]`. Ferry already logs `durationMs` on every anchor-facing call (`lib/logger.ts`, `lib/apiInstrumentation.ts`) — once a candidate anchor is reachable, this row can be populated from real logged traffic rather than a synthetic benchmark.
+
+---
+
 ## 1. Candidate Anchors — EUR Sending Side
 
 | Field | Value |
@@ -103,6 +119,8 @@ Every parameter in §1–§4 that maps to a machine-readable anchor field should
 2. **Contractually**, against the signed pilot agreement or written confirmation from the anchor's business contact, for anything not exposed in a public endpoint (refund SLA, liability terms, pilot pricing).
 
 ## 7. Traditional Corridor Cost Baseline (EUR → TRY)
+
+For corridor scale (why this matters beyond a single reference transfer), see `README.md` §1: Germany's outbound remittances to Turkey run on the order of US$3.1–3.8B/yr by derived estimate (World Bank + Bundesbank sourcing), against a global average remittance cost of 6.36% — more than double the UN SDG 10.c target of below 3% by 2030.
 
 The SOW asks Ferry's target model to be compared against at least three traditional channels for sending EUR to Turkey. This section replaces `COST_BASELINE.md`'s earlier "generally known" figures with numbers that are each individually sourced and dated — but it's still not a single simultaneous same-day quote across all four, because two of the three incumbents don't expose a fetchable live quote the way Wise does (see the per-row notes). `COST_BASELINE.md` now points here rather than duplicating this table.
 

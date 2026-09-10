@@ -38,6 +38,21 @@ Unlike SEP-31, a SEP-24 hosted deposit involves the user actually paying the anc
 
 ## 4. Incident response
 
+### 4.0 Deterministic rule: automatic resolution vs. human escalation
+
+Formalizing §2–§3 above into a single decision rule, so "does this need a human" is answerable mechanically rather than case-by-case:
+
+| Condition | Resolution | Automatic? |
+|---|---|---|
+| Failure detected **before** a SEP-31 transaction is created (expired quote, anchor rejection, invalid IBAN, failed KYC — §2) | Clean — no funds moved, no refund needed | ✅ Fully automatic — Ferry's own client-side/API-response logic determines this with certainty, no ambiguity possible |
+| SEP-24 transaction reports `refunded: true` with a populated `refunds` object (§3) | Anchor-confirmed refund — displayed with the anchor's own amount/fee/payment-id detail | ✅ Automatic display; the refund *decision* was the anchor's, Ferry only surfaces it |
+| SEP-24 transaction reports `refunded: true` **without** a populated `refunds` object (§3) | Anchor confirms a refund occurred but withheld detail | ⚠️ Automatic detection, but the amount/timing is unconfirmed — flag for human follow-up with the anchor if the user asks for specifics |
+| SEP-24 transaction terminates in bare `"error"` status, no `refunded` field at all (§3, known gap) | Unknown fund status | ❌ Requires human escalation to the anchor directly — Ferry has no signal to resolve this on its own |
+| A sender-paid SEP-31 transaction (payment made outside Ferry's own flow, per §2's scope note) never reaches a terminal status Ferry can observe | Unknown fund status | ❌ Requires human escalation — Ferry does not currently poll SEP-31 status post-creation (tracked in §4.3) |
+| Anything not covered by an anchor's SEP-24/31 transaction-status API (internal fraud, banking-rail failure, compliance hold) | Unknown by construction | ❌ Always requires human escalation to the anchor — no API surface exists for Ferry to observe this regardless of future engineering work |
+
+**The rule in one sentence:** if a failure is detected by Ferry's own code *before* a transaction is created, resolution is automatic and certain (nothing moved); once a transaction exists and money can genuinely be in flight, resolution is only ever as automatic as what the anchor's own API reports — Ferry escalates to a human for every gap in that reporting rather than guessing.
+
 ### 4.1 What Ferry can detect automatically
 
 - Anchor timeouts and connectivity failures (`AnchorError` with code `ANCHOR_TIMEOUT` / `NETWORK_ERROR`, surfaced as HTTP `504`/`502`) — logged via `lib/logger.ts` with the failing route and anchor context.

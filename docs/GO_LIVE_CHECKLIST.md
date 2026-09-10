@@ -5,6 +5,25 @@
 
 ---
 
+## 0. Ten-Point Go-Live Gate (executive summary)
+
+A condensed roll-up of §1–§3 below into 10 headline items across the three pillars a Mainnet cutover actually depends on. Each status is checked only when independently verifiable against the codebase or a dated decision, same standard as the rest of this document — this section does not relax that bar, it summarizes it.
+
+| # | Pillar | Gate item | Status | Detail |
+|---|---|---|---|---|
+| 1 | Technical | Core SEP-10/12/24/31/38 orchestration implemented and live-tested end-to-end, including a genuine on-chain settlement | ✅ Done | §1; `TESTNET_HASHES.md` §10 |
+| 2 | Technical | Idempotent transfer state machine and complete 4-scenario failure matrix implemented | ✅ Done | §1; `README.md` §5 |
+| 3 | Technical | Structured logging, session-scoped audit trail, and basic failure-rate alerting wired | ✅ Done (basic — not yet connected to an external monitoring platform) | §1; `docs/RUNBOOK.md` §3.1–§3.2 |
+| 4 | Technical | Shared-state migration for rate limiting, idempotency, and the audit trail (currently in-memory, single-instance only) | ❌ Open | §1; `docs/RUNBOOK.md` §5 |
+| 5 | Regulatory/Compliance | EUR-side and TRY-side anchor relationships signed, with limits/fees/refund SLA confirmed in writing | ❌ Open | §2; `CORRIDOR_VERIFICATION.md` §1–§3 |
+| 6 | Regulatory/Compliance | Regulatory review completed confirming Ferry's "non-custodial orchestrator" framing holds in the relevant jurisdiction(s) | ❌ Open | §2 |
+| 7 | Regulatory/Compliance | Terms of service / privacy policy published, reflecting the actual (proxy-only, no storage) KYC data flow | ❌ Open | §2; `docs/KEY_MANAGEMENT.md` §2 |
+| 8 | Operational | On-call rotation, alerting thresholds, and a documented rollback procedure decided | ❌ Open | §2; `docs/RUNBOOK.md` §5 |
+| 9 | Operational | Key-management scope decision formally recorded — today's honest answer is "not applicable, no signing key exists," but that needs a dated, explicit sign-off rather than standing on this document's assertion alone | ⚠️ Documented, not formally signed off | `docs/KEY_MANAGEMENT.md` §3 |
+| 10 | Operational | Go/no-go decision documented, incident/refund escalation contacts published | ❌ Open | §2; `docs/REFUND_AND_INCIDENT_PROCEDURES.md` §4.3 |
+
+**Gate status: 3 of 10 fully clear, 1 partial, 6 open** — all 6 open items are either shared-datastore engineering work (item 4) or business/legal decisions no document can complete on its own (items 5–8, 10). See §1–§3 below for the full itemized checklist each of these ten rolls up from.
+
 ## 1. Application-layer (verifiable against this codebase)
 
 - [x] SEP-10/12/24/31/38 orchestration implemented and live-tested against a public Testnet reference anchor (`GAP_ANALYSIS.md` §3; `TESTNET_HASHES.md`)
