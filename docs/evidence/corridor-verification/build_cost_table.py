@@ -8,8 +8,8 @@ Formula (also stated in report.md §5.2):
     total_cost_pct = total_cost / total_paid * 100
 
 Updates report.md in place between the COST_TABLE / RECEIPTS markers and the
-"Baseline table shows measured total cost..." row of §6. Missing values are
-shown as [TODO] and never estimated.
+"Baseline table shows measured total cost..." row of §7. Missing values are
+shown as "—" and never estimated; channels with no recorded data are left out.
 """
 
 import re
@@ -25,7 +25,7 @@ DATA = HERE / "transfers.yaml"
 IMAGES = HERE / "images"
 
 NUMERIC = ("eur_sent", "send_fee_eur", "try_received", "mid_market_rate")
-TODO = "[TODO]"
+MISSING = "—"
 
 
 def is_blank(value):
@@ -43,17 +43,17 @@ def to_decimal(value, field, channel):
 
 def fmt(value, places=2):
     if value is None:
-        return TODO
+        return MISSING
     rounded = round(value, places)
     return f"{rounded + 0:,.{places}f}" if rounded else f"{0:.{places}f}"
 
 
 def text(value):
-    return TODO if is_blank(value) else str(value).strip()
+    return MISSING if is_blank(value) else str(value).strip()
 
 
 def label(row, index):
-    return text(row.get("channel")) if not is_blank(row.get("channel")) else f"[TODO: channel {index} name]"
+    return text(row.get("channel")) if not is_blank(row.get("channel")) else f"Channel {index} (name not recorded)"
 
 
 def compute(row):
@@ -94,7 +94,7 @@ def build_table(rows):
 
 
 def build_notes(rows, source):
-    source = "[TODO: fill in mid_market_source in transfers.yaml]" if is_blank(source) else str(source).strip()
+    source = "not recorded" if is_blank(source) else str(source).strip()
     notes = [f"**Mid-market rate source:** {source}"]
     for i, row in enumerate(rows, 1):
         if not is_blank(row.get("notes")):
@@ -102,9 +102,20 @@ def build_notes(rows, source):
     return "\n\n".join(notes)
 
 
+def has_data(row):
+    fields = NUMERIC + ("date", "receipt_image")
+    return any(not is_blank(row.get(f)) for f in fields)
+
+
+def no_data_text():
+    return ("No measured transfers have been recorded yet. The same-day transfers through each channel "
+            "are still to be made; until then, see the published reference figures in 5.4.")
+
+
 def baseline_check(rows):
-    if not rows:
-        return "✗ — no channels in transfers.yaml"
+    if not any(has_data(r) for r in rows):
+        return ("✗ — The same-day measured transfers have not been made yet, so no channel's total cost "
+                "has been measured (Section 5). Published reference figures are given in 5.4.")
     incomplete, no_receipt, problems = [], [], []
     for i, row in enumerate(rows, 1):
         name = text(row.get("channel")) if not is_blank(row.get("channel")) else f"channel {i}"
@@ -125,15 +136,14 @@ def baseline_check(rows):
 
 
 def build_receipts(rows):
+    with_receipt = [(i, r) for i, r in enumerate(rows, 1) if receipt_ok(r)]
+    if not with_receipt:
+        return ""
     parts = ["## Appendix A. Transfer Receipts"]
-    for i, row in enumerate(rows, 1):
+    for i, row in with_receipt:
         name = label(row, i)
         parts.append(f"### {name}")
-        image = row.get("receipt_image")
-        if receipt_ok(row):
-            parts.append(f"![Receipt — {name}](images/{str(image).strip()})")
-        else:
-            parts.append("[TODO: add the receipt screenshot to images/ and set receipt_image in transfers.yaml]")
+        parts.append(f"![Receipt — {name}](images/{str(row['receipt_image']).strip()})")
     return "\n\n".join(parts)
 
 
@@ -147,10 +157,17 @@ def replace_block(doc, tag, body):
 def main():
     data = yaml.safe_load(DATA.read_text(encoding="utf-8")) or {}
     rows = data.get("transfers") or []
+    measured = [r for r in rows if has_data(r)]
 
     doc = REPORT.read_text(encoding="utf-8")
-    doc = replace_block(doc, "COST_TABLE", build_table(rows) + "\n\n" + build_notes(rows, data.get("mid_market_source")))
-    doc = replace_block(doc, "RECEIPTS", build_receipts(rows))
+    if measured:
+        body = build_table(measured) + "\n\n" + build_notes(measured, data.get("mid_market_source"))
+        if len(measured) < len(rows):
+            body += "\n\n— = not recorded. Channels with no recorded transfer yet are not shown."
+    else:
+        body = no_data_text()
+    doc = replace_block(doc, "COST_TABLE", body)
+    doc = replace_block(doc, "RECEIPTS", build_receipts(measured))
 
     check_row = re.compile(r"^\| Baseline table shows measured total cost of each channel \|.*\|$", re.M)
     if not check_row.search(doc):

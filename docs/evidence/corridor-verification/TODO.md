@@ -3,11 +3,11 @@
 Everything below must come from real sources (anchor e-mails, real transfers, receipts). Run `./build.sh` after each update to regenerate the PDF.
 
 ## Cover (`report.md`)
-- [ ] Report date
-- [ ] Prepared by (name and role)
+- [x] Report date
+- [x] Prepared by (name and role)
 
 ## 1. Summary (`report.md`)
-- [ ] 3–4 sentence summary (write last, after the other sections are filled)
+- [x] 3–4 sentence summary (current-status version written 2026-10-08 — rewrite once anchors confirm and transfers are measured)
 
 ## 2. Anchor Confirmations (`report.md`)
 ### EUR side
@@ -50,7 +50,7 @@ Everything below must come from real sources (anchor e-mails, real transfers, re
 - [ ] Channel 4: name, date, eur_sent, send_fee_eur, try_received, mid_market_rate, receipt_image
 - [ ] All receipt screenshots added to `images/`
 
-## 6. Success Criteria (`report.md`)
+## 7. Success Criteria (`report.md`)
 - [ ] "Both anchors confirmed in writing" → ✓ or ✗ (manual)
 - [ ] "Baseline table…" row shows ✓ after `./build.sh` (automatic)
 

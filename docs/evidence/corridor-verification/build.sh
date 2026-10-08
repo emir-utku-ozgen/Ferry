@@ -19,8 +19,8 @@ fi
 .venv/bin/python build_cost_table.py
 
 # 2. Warn about screenshots referenced by the report that are not in images/ yet.
-grep -oE 'images/[A-Za-z0-9_-][A-Za-z0-9._-]*\.[A-Za-z]+' report.md | sort -u | while read -r img; do
-  [ -f "$img" ] || echo "Note: $img not found yet — it will appear as [TODO] text in the PDF."
+{ grep -oE 'images/[A-Za-z0-9_-][A-Za-z0-9._-]*\.[A-Za-z]+' report.md || true; } | sort -u | while read -r img; do
+  [ -f "$img" ] || echo "Note: $img not found yet — it will appear as its alt text in the PDF."
 done
 
 # 3. Markdown -> HTML -> PDF.

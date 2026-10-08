@@ -2,7 +2,7 @@
 #
 # Fill in one entry per channel from a REAL transfer and its receipt.
 # Leave a field empty (no value) until you have the real figure; empty
-# fields show up as [TODO] in the report table and are not calculated.
+# fields show up as "—" in the report table and are not calculated; a channel with no data is left out.
 #
 # Field definitions (all amounts as numbers, no currency symbols):
 #   channel          Name of the channel/provider, e.g. a bank or money-transfer service.

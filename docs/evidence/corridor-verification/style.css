@@ -31,3 +31,6 @@ h3#results ~ table th, h3#results ~ table td { padding: 1.2mm 1.2mm; }
 figure { margin: 4mm 0; text-align: center; page-break-inside: avoid; }
 img { max-width: 100%; max-height: 200mm; border: 1px solid #c9d3dd; }
 figcaption { font-size: 9pt; color: #555; margin-top: 1.5mm; }
+
+/* Long hashes in tables: smaller monospace, allowed to wrap. */
+td code { font-size: 7.6pt; word-break: break-all; }
