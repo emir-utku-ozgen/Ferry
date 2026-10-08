@@ -46,7 +46,7 @@ const EURC_ISSUER = "GB3Q6QDZYTHWT7E5PVS3W7FUT5GVAFC5KSZFFLPU25GO7VTC3NM2ZTVO";
 
 // Illustrative, fixed mock rate — not a live FX feed. Stated plainly so
 // nobody mistakes this for a real quoted market rate.
-const MOCK_EURC_TRY_RATE = 44.50;
+const MOCK_EURC_TRY_RATE = 55.35;
 
 // Testnet-friendly amount range: real Testnet EURC is scarce (Circle's own
 // faucet gives small drips, and there's negligible DEX liquidity to

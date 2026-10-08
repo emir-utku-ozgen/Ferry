@@ -309,6 +309,42 @@ Two transient artifacts appeared mid-run, both consistent with — not new insta
 
 ---
 
+## 11. Mock Anchor Re-Run at 55.35 TRY/EURC (2026-10-08)
+
+Run against Ferry's standalone mock anchor (`mock-anchor/`, `localhost:4001`) through Ferry's real `/api/sep{10,12,38,31}/*` routes (Next.js dev server, `localhost:3000`), after changing the mock anchor's fixed illustrative rate from 44.5 to 55.35 TRY/EURC (`mock-anchor/server.js` and `lib/mockAnchor/config.ts`, `MOCK_EURC_TRY_RATE`). Fee unchanged at 0.5% of the sell amount; quote validity unchanged at 5 minutes. Same standard as §1–§10: every hash below was read back from Horizon Testnet after the run.
+
+### 11.1 Setup
+
+```
+Sender:              GCNAYI4LKBYBGXWYK737H3GNETLCPO5ZAUCIZ3MLFG2RL2ACO2DJMLGN  (new, script-generated; secret held only locally, Testnet-only)
+Friendbot funding:   d1c95ace3dc77800466a3dda0937cfe2a4214ef799233993a12004d20ba1c990  (ledger 5091557)
+EURC trustline:      d93135192fec894c6b76bad0b9f94ed3334203d80fd2841b40953db744f63947  (ledger 5091558)
+EURC funding:        7e775bb98c7abca2f6943d434c42b90fa5f7da4d3a88aead77e8525e55d0090f  (ledger 5091559, 8.5 EURC)
+```
+
+**Disclosure on the EURC funding:** Testnet EURC still cannot be acquired automatically (§8.3, §9.6), so the sender's 8.5 EURC came from the mock anchor's own receiving account (`GBDODNXHPROEII5UX3T23GOLDD53XMDQHNLDXEFHIL2CIPPXFHXTGHAF`, signed with `mock-anchor/.env`'s `SIGNING_SECRET` — Ferry's own test infrastructure), which held EURC from earlier runs. The transfers below therefore pay EURC back to the account it came from. This does not affect what the run demonstrates (the orchestration flow, memo/amount matching, settlement and payout), but it is stated here rather than left implicit.
+
+SEP-10 token obtained via `/api/sep10/challenge` + `/api/sep10/token` (challenge signed locally with the sender key). SEP-12 `PUT` returned `{"id": "GCNAYI4L..."}`; `GET` returned `ACCEPTED`.
+
+### 11.2 Transfers
+
+| | A | B | C |
+|---|---|---|---|
+| SEP-38 quote | `mockq_muztre00zw4o` | `mockq_muztrnlwxarm` | `mockq_muztrvhzp4d1` |
+| Sell / fee / price | 5 EURC / 0.025 / 55.35 | 2.5 EURC / 0.0125 / 55.35 | 1 EURC / 0.005 / 55.35 |
+| Net buy (quoted) | 275.3662500 TRY | 137.6831250 TRY | 55.0732500 TRY |
+| Quote expires | 2026-10-08T17:48:03.072Z | 2026-10-08T17:48:15.524Z | 2026-10-08T17:48:25.751Z |
+| SEP-31 tx id / memo | `3lfeapkd` | `hge71rtb` | `fcj4s1b0` |
+| EURC payment hash | `99389e9daf565ee4beb1f78a76e2beb429b9c8abdbfd2e167acdf237184ee561` | `58ce0f347152d8f7343b79d3a4826e89848e909e351b9a904286f47790322e57` | `bd7c7f1aead32408fc0f64517f6e1f68c3515f29caf6a10c1acebcdffe580db8` |
+| Payment ledger / time | 5091560 / 17:43:07Z | 5091562 / 17:43:17Z | 5091565 / 17:43:32Z |
+| Demo TRY payout hash | `3aeadf53ac16499207705ab1afb761c89ed30f5c78c40b08269ce4ed63ba9a92` | `51681c89a276cc73964053094bd6db5ac8fe6daa4521890aebc38cac68f1c38a` | `f265bc3a88179610a333238c04498240257cd724e998feeb29f2b83c0dd811ec` |
+| Payout ledger / time / amount | 5091561 / 17:43:12Z / 275.3662500 TRY | 5091563 / 17:43:22Z / 137.6831250 TRY | 5091566 / 17:43:37Z / 55.0732500 TRY |
+| Final status (via `GET /api/sep31/transactions`) | `completed`, `received_amount` 5.0000000 | `completed`, `received_amount` 2.5000000 | `completed`, `received_amount` 1.0000000 |
+
+Check: net buy = (sell − fee) × 55.35 → 4.975 × 55.35 = 275.36625; 2.4875 × 55.35 = 137.683125; 0.995 × 55.35 = 55.07325. Each payout amount on-chain equals the quoted net buy exactly. The demo payout recipient is the `MOCK_PAYOUT_DEMO_ACCOUNT` from §8 (`GCWF5ZQBC6P4YFTM5TKYOC3KVGOENITGCNC2KZMYYPJQIL7H34HZ2TWN`); as in §8.4, this payout is a demonstration artifact, not how a real SEP-31 payout works.
+
+---
+
 ## Failure scenarios requested but not genuinely reproducible against this anchor
 
 Being direct about this rather than inventing results:

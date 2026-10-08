@@ -19,7 +19,7 @@ export const EMBEDDED_MOCK_ANCHOR_ENABLED = process.env.NEXT_PUBLIC_ENABLE_EMBED
 // Illustrative, fixed mock rate — not a live FX feed. Stated plainly so
 // nobody mistakes this for a real quoted market rate. Mirrors
 // mock-anchor/server.js's own MOCK_EURC_TRY_RATE exactly.
-export const MOCK_EURC_TRY_RATE = 44.5;
+export const MOCK_EURC_TRY_RATE = 55.35;
 
 // Testnet-friendly amount range — see mock-anchor/server.js's own comment:
 // real Testnet EURC is scarce, so the minimum stays low enough that
