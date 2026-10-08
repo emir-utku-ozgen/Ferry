@@ -1,0 +1,33 @@
+@page {
+  size: A4;
+  margin: 22mm 18mm 20mm 18mm;
+  @bottom-right { content: counter(page) " / " counter(pages); font-size: 8.5pt; color: #777; }
+  @bottom-left { content: "Ferry — Corridor Verification, Pilot Terms and Cost Baseline"; font-size: 8.5pt; color: #777; }
+}
+@page :first { @bottom-left { content: none; } @bottom-right { content: none; } }
+
+html { font-family: "Helvetica Neue", Helvetica, Arial, "DejaVu Sans", sans-serif; font-size: 10.5pt; line-height: 1.5; color: #1f2328; }
+
+.cover { page-break-after: always; padding-top: 70mm; }
+.cover h1 { font-size: 26pt; line-height: 1.2; color: #0b3d63; border-bottom: 3px solid #0b3d63; padding-bottom: 6mm; margin-bottom: 12mm; }
+.cover p { font-size: 12pt; margin: 3mm 0; }
+
+h2 { font-size: 15pt; color: #0b3d63; border-bottom: 1px solid #c9d3dd; padding-bottom: 2mm; margin-top: 10mm; page-break-after: avoid; }
+h3 { font-size: 12pt; color: #0b3d63; margin-top: 6mm; page-break-after: avoid; }
+p, li { orphans: 3; widows: 3; }
+code { font-family: Menlo, "DejaVu Sans Mono", monospace; font-size: 8.8pt; background: #f2f4f7; padding: 0 2px; border-radius: 2px; }
+
+table { width: 100%; border-collapse: collapse; margin: 4mm 0; font-size: 9pt; page-break-inside: auto; }
+tr { page-break-inside: avoid; }
+th { background: #0b3d63; color: #fff; text-align: left; font-weight: 600; }
+th, td { border: 1px solid #c9d3dd; padding: 1.6mm 2mm; vertical-align: top; }
+tbody tr:nth-child(even) td { background: #f6f8fa; }
+thead:empty, thead tr:empty { display: none; }
+
+/* The cost table has many columns; keep it compact. */
+h3#results ~ table { font-size: 7.8pt; }
+h3#results ~ table th, h3#results ~ table td { padding: 1.2mm 1.2mm; }
+
+figure { margin: 4mm 0; text-align: center; page-break-inside: avoid; }
+img { max-width: 100%; max-height: 200mm; border: 1px solid #c9d3dd; }
+figcaption { font-size: 9pt; color: #555; margin-top: 1.5mm; }

@@ -1,0 +1,63 @@
+# Raw data for Section 5 (Cost Comparison Baseline) of report.md.
+#
+# Fill in one entry per channel from a REAL transfer and its receipt.
+# Leave a field empty (no value) until you have the real figure; empty
+# fields show up as [TODO] in the report table and are not calculated.
+#
+# Field definitions (all amounts as numbers, no currency symbols):
+#   channel          Name of the channel/provider, e.g. a bank or money-transfer service.
+#   date             Date the transfer was made, YYYY-MM-DD. All channels should be the same day.
+#   eur_sent         EUR amount that was converted to TRY, EXCLUDING the sending fee.
+#                    If the provider took the fee out of the amount you entered
+#                    (e.g. you paid 1000 in total and 6.91 was the fee), enter 993.09 here.
+#   send_fee_eur     Sending fee charged by the provider, in EUR. Enter 0 if there was none.
+#   try_received     TRY amount that actually arrived in the recipient's account
+#                    (after any intermediary or receiving-bank deductions).
+#   mid_market_rate  Mid-market EUR->TRY rate (TRY per 1 EUR) at the time of the transfer.
+#   receipt_image    File name of the receipt screenshot inside images/, e.g. receipt-bank.png.
+#   notes            Optional free text (e.g. payout method, transfer time).
+#
+# Source used for all mid-market rates (name of the rate provider/page and how it
+# was captured, e.g. a screenshot). Required for the methodology section.
+mid_market_source:
+
+transfers:
+  # Our channel. Keep this entry.
+  - channel: Ferry (Stellar)
+    date:
+    eur_sent:
+    send_fee_eur:
+    try_received:
+    mid_market_rate:
+    receipt_image:
+    notes:
+
+  # Traditional channel 1
+  - channel:
+    date:
+    eur_sent:
+    send_fee_eur:
+    try_received:
+    mid_market_rate:
+    receipt_image:
+    notes:
+
+  # Traditional channel 2
+  - channel:
+    date:
+    eur_sent:
+    send_fee_eur:
+    try_received:
+    mid_market_rate:
+    receipt_image:
+    notes:
+
+  # Traditional channel 3
+  - channel:
+    date:
+    eur_sent:
+    send_fee_eur:
+    try_received:
+    mid_market_rate:
+    receipt_image:
+    notes:
