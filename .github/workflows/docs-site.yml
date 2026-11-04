@@ -9,6 +9,9 @@ on:
     paths:
       - "docs/**"
       - "docs-site/**"
+      - "GAP_ANALYSIS.md"
+      - "CORRIDOR_VERIFICATION.md"
+      - "TESTNET_HASHES.md"
       - ".github/workflows/docs-site.yml"
   workflow_dispatch:
 

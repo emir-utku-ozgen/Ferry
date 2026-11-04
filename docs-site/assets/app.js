@@ -18,7 +18,13 @@
   };
   navToggle?.addEventListener("click", () => setNav(!document.body.classList.contains("nav-open")));
   $$("[data-close-nav]").forEach((el) => el.addEventListener("click", () => setNav(false)));
-  $(".sidebar .is-active")?.scrollIntoView({ block: "center" });
+  // Keep the active item visible by scrolling only the sidebar, never the page.
+  const sidebar = $(".sidebar");
+  const activeItem = $(".sidebar .is-active");
+  if (sidebar && activeItem) {
+    const offset = activeItem.offsetTop - sidebar.clientHeight / 2;
+    if (offset > 0) sidebar.scrollTop = offset;
+  }
 
   // Copy buttons -----------------------------------------------------------
   $$(".copy-btn").forEach((btn) =>

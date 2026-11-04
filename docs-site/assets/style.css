@@ -554,3 +554,5 @@ kbd {
 }
 
 .hash code { font-variant-ligatures: none; }
+.log-link { color: #f7c965; text-decoration: underline; text-decoration-color: rgb(247 201 101 / 0.4); text-underline-offset: 3px; }
+.log-link:hover { text-decoration-color: #f7c965; }

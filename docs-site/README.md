@@ -1,6 +1,6 @@
 # Ferry Docs site
 
-Static documentation site generated from the Markdown in [`../docs`](../docs). The Markdown stays the single source of truth; this folder only holds the generator and theme.
+Static documentation site generated from the Markdown in [`../docs`](../docs) plus the root reference reports (`GAP_ANALYSIS.md`, `CORRIDOR_VERIFICATION.md`, `TESTNET_HASHES.md`). The Markdown stays the single source of truth; this folder only holds the generator and theme.
 
 ```bash
 cd docs-site

@@ -62,6 +62,30 @@ const PAGES = [
       "A timed, second-by-second script for recording the end-to-end transfer demo in under ten minutes.",
   },
   {
+    slug: "gap-analysis",
+    source: "GAP_ANALYSIS.md",
+    group: "Reference",
+    nav: "SOW Compliance & Gap Analysis",
+    description:
+      "Requirement-by-requirement SOW compliance assessment, with the technical rationale behind every open gap.",
+  },
+  {
+    slug: "corridor-verification",
+    source: "CORRIDOR_VERIFICATION.md",
+    group: "Reference",
+    nav: "Corridor Verification Log",
+    description:
+      "Anchor outreach record, EURC issuer verification and the sourced, dated incumbent cost comparison.",
+  },
+  {
+    slug: "testnet-hashes",
+    source: "TESTNET_HASHES.md",
+    group: "Evidence",
+    nav: "Testnet Transaction Evidence",
+    description:
+      "Every live Testnet run, with transaction hashes linked to the public Stellar explorer for independent checking.",
+  },
+  {
     slug: "corridor-verification-report",
     source: "docs/evidence/corridor-verification/report.md",
     group: "Evidence",
@@ -175,6 +199,19 @@ function linkifyCode(inner, fromSlug) {
   return null;
 }
 
+// In log excerpts, a 64-hex value on a line that says "hash" is a Stellar
+// transaction hash: make it clickable without altering the log text.
+function linkLogHashes(html) {
+  return html
+    .split("\n")
+    .map((line) =>
+      /hash/i.test(line)
+        ? line.replace(/(?<![\w/])([0-9a-f]{64})(?![\w])/g, `<a class="log-link" href="${EXPLORER}/tx/$1" target="_blank" rel="noopener">$1</a>`)
+        : line
+    )
+    .join("\n");
+}
+
 // ---------------------------------------------------------------------------
 // Markdown -> page model
 
@@ -243,7 +280,7 @@ function renderPage(page) {
       const label = lang ? `<span class="code-lang">${escapeHtml(lang)}</span>` : "";
       return `<div class="code-block">${label}<button class="copy-btn" type="button" aria-label="Copy code">Copy</button><pre><code${
         lang ? ` class="language-${escapeHtml(lang)}"` : ""
-      }>${escapeHtml(text)}</code></pre></div>\n`;
+      }>${linkLogHashes(escapeHtml(text))}</code></pre></div>\n`;
     },
     html({ text }) {
       // Build markers such as <!-- COST_TABLE_START --> are not content.
@@ -322,6 +359,7 @@ const GROUP_ICONS = {
   Operations: `<svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="2.6" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M10 2.5v2.2M10 15.3v2.2M2.5 10h2.2M15.3 10h2.2M4.7 4.7l1.6 1.6M13.7 13.7l1.6 1.6M4.7 15.3l1.6-1.6M13.7 6.3l1.6-1.6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>`,
   Security: `<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2.5 4 5v4.5c0 3.8 2.6 6.6 6 8 3.4-1.4 6-4.2 6-8V5z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="m7.5 10 1.8 1.8 3.4-3.6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
   Delivery: `<svg viewBox="0 0 20 20" aria-hidden="true"><rect x="2.5" y="4.5" width="11" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="m13.5 8.5 4-2.5v8l-4-2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>`,
+  Reference: `<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 3.5h9.5a2 2 0 0 1 2 2v11H6a2 2 0 0 1-2-2z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M4 14.5a2 2 0 0 1 2-2h9.5M7.5 7h5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>`,
   Evidence: `<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 2.5h7l3.5 3.5v11.5H5z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 11l1.6 1.6L13 9.2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
 };
 
@@ -496,7 +534,7 @@ function homePage(pages) {
 </section>
 
 <section class="docs-index">
-  <div class="section-head"><h2>Browse the documentation</h2><p>${pages.length} documents, generated directly from the <a href="${REPO_URL}/tree/${BRANCH}/docs" target="_blank" rel="noopener"><code>docs/</code></a> directory.</p></div>
+  <div class="section-head"><h2>Browse the documentation</h2><p>${pages.length} documents, generated directly from the <a href="${REPO_URL}" target="_blank" rel="noopener">Ferry repository</a>.</p></div>
   <div class="cards">${cards.join("")}</div>
 </section>
 
