@@ -16,9 +16,11 @@ import { getHorizonServer, EURC_ISSUER, HOME_DOMAIN, isLocalHostname } from "@/l
 
 export const EMBEDDED_MOCK_ANCHOR_ENABLED = process.env.NEXT_PUBLIC_ENABLE_EMBEDDED_MOCK_ANCHOR === "true";
 
-// Illustrative, fixed mock rate — not a live FX feed. Stated plainly so
-// nobody mistakes this for a real quoted market rate. Mirrors
-// mock-anchor/server.js's own MOCK_EURC_TRY_RATE exactly.
+// The embedded anchor now quotes at a live EUR/TRY reference rate — see
+// lib/mockAnchor/fxRate.ts. This fixed value is only the last-resort
+// fallback when every live source is unreachable, and still mirrors
+// mock-anchor/server.js's own MOCK_EURC_TRY_RATE (the standalone server
+// keeps the fixed rate).
 export const MOCK_EURC_TRY_RATE = 55.35;
 
 // Testnet-friendly amount range — see mock-anchor/server.js's own comment:
