@@ -147,7 +147,9 @@ function lastUpdated(file) {
   } catch {
     /* not a git checkout */
   }
-  return fs.statSync(path.join(REPO_ROOT, file)).mtime.toISOString().slice(0, 10);
+  // Shallow clones (e.g. CI) may not contain the file's last commit; show no
+  // date rather than a misleading one.
+  return null;
 }
 
 function formatDate(iso) {
@@ -470,7 +472,7 @@ function docPage(p, prev, next) {
   <div class="crumbs"><a href="index.html">Docs</a><span>/</span><span>${p.group}</span></div>
   <h1 class="doc-title">${escapeHtml(p.title)}</h1>
   <div class="doc-byline">
-    <span>Updated ${formatDate(p.updated)}</span><span class="sep">·</span><span>${p.minutes} min read</span>
+    ${p.updated ? `<span>Updated ${formatDate(p.updated)}</span><span class="sep">·</span>` : ""}<span>${p.minutes} min read</span>
     <span class="byline-actions">
       ${download}
       <a class="btn" href="${REPO_URL}/blob/${BRANCH}/${p.source}" target="_blank" rel="noopener">${ICONS.edit}<span>View source</span></a>
