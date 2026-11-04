@@ -3,12 +3,15 @@
  * price/quote endpoints.
  *
  * Sources, tried in order:
- *   1. Frankfurter (https://frankfurter.dev): European Central Bank daily
- *      reference rates. Free, no API key.
- *   2. ExchangeRate-API open endpoint (https://open.er-api.com): free, no
- *      key, also updated daily.
- *   3. MOCK_EURC_TRY_RATE: the previous fixed illustrative rate. Used only
- *      if both live sources are unreachable, and labelled as such.
+ *   1. Coinbase public exchange-rates API (https://api.coinbase.com/v2/
+ *      exchange-rates): intraday mid-market rate, updated every minute or
+ *      so. Free, no API key.
+ *   2. Frankfurter (https://frankfurter.dev): European Central Bank daily
+ *      reference rate. Free, no API key.
+ *   3. ExchangeRate-API open endpoint (https://open.er-api.com): free, no
+ *      key, updated daily.
+ *   4. MOCK_EURC_TRY_RATE: the previous fixed illustrative rate. Used only
+ *      if every live source is unreachable, and labelled as such.
  *
  * The anchor is still simulated: TRY is a Testnet mock asset and nothing
  * settles in real lira. Only the *rate* is live.
@@ -18,7 +21,7 @@ import { MOCK_EURC_TRY_RATE } from "@/lib/mockAnchor/config";
 
 export const FALLBACK_EUR_TRY_RATE = MOCK_EURC_TRY_RATE;
 
-export type FxRateSource = "frankfurter-ecb" | "open-er-api" | "fallback-fixed";
+export type FxRateSource = "coinbase" | "frankfurter-ecb" | "open-er-api" | "fallback-fixed";
 
 export interface FxRate {
   rate: number;
@@ -28,7 +31,7 @@ export interface FxRate {
   fetchedAt: string;
 }
 
-const CACHE_TTL_MS = 10 * 60_000;
+const CACHE_TTL_MS = 5 * 60_000;
 const FALLBACK_RETRY_MS = 60_000;
 const FETCH_TIMEOUT_MS = 4_000;
 
@@ -49,6 +52,17 @@ async function getJson(url: string, fetchImpl: typeof fetch): Promise<unknown> {
   });
   if (!res.ok) throw new Error(`${url} responded ${res.status}`);
   return res.json();
+}
+
+async function fromCoinbase(fetchImpl: typeof fetch): Promise<FxRate> {
+  const data = (await getJson("https://api.coinbase.com/v2/exchange-rates?currency=EUR", fetchImpl)) as {
+    data?: { rates?: { TRY?: string } };
+  };
+  const rate = Number(data.data?.rates?.TRY);
+  if (!isPlausible(rate)) throw new Error("Coinbase returned no usable TRY rate");
+  const fetchedAt = new Date().toISOString();
+  // Coinbase doesn't publish a timestamp; the rate is current as of the fetch.
+  return { rate, source: "coinbase", asOf: fetchedAt, fetchedAt };
 }
 
 async function fromFrankfurter(fetchImpl: typeof fetch): Promise<FxRate> {
@@ -74,7 +88,7 @@ async function fromOpenErApi(fetchImpl: typeof fetch): Promise<FxRate> {
 }
 
 async function fetchLiveRate(fetchImpl: typeof fetch): Promise<FxRate> {
-  for (const source of [fromFrankfurter, fromOpenErApi]) {
+  for (const source of [fromCoinbase, fromFrankfurter, fromOpenErApi]) {
     try {
       return await source(fetchImpl);
     } catch (err) {
@@ -88,8 +102,8 @@ async function fetchLiveRate(fetchImpl: typeof fetch): Promise<FxRate> {
 }
 
 /**
- * Current EUR -> TRY rate, cached for 10 minutes per warm instance (the
- * upstream sources only update daily). A fallback result is cached for one
+ * Current EUR -> TRY rate, refreshed at most every 5 minutes per warm
+ * instance. A fallback result is cached for one
  * minute only, so a short outage recovers quickly.
  */
 export async function getEurTryRate(fetchImpl: typeof fetch = fetch): Promise<FxRate> {
