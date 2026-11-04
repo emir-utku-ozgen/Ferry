@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkRateLimit, rateLimitResponse } from "@/lib/rateLimit";
-import { amountOutOfRange, EURC_ISSUER, getTryIssuerKeypair, MIN_EURC_AMOUNT, MAX_EURC_AMOUNT, MOCK_EURC_TRY_RATE } from "@/lib/mockAnchor/config";
+import { amountOutOfRange, EURC_ISSUER, getTryIssuerKeypair, MIN_EURC_AMOUNT, MAX_EURC_AMOUNT } from "@/lib/mockAnchor/config";
+import { getEurTryRate } from "@/lib/mockAnchor/fxRate";
 
 /**
  * GET /api/mock-anchor/sep38/price — unauthenticated indicative price.
  * Direct port of mock-anchor/server.js's `/sep38/price` handler: this mock
- * anchor only ever quotes EURC -> TRY, at a fixed illustrative rate (not a
- * live FX feed) — see CORRIDOR_VERIFICATION.md §5.
+ * anchor only ever quotes EURC -> TRY, at the live EUR/TRY reference rate
+ * from lib/mockAnchor/fxRate.ts (TRY itself is still a simulated asset) —
+ * see CORRIDOR_VERIFICATION.md §5.
  */
 export async function GET(req: NextRequest) {
   const rateLimit = checkRateLimit(req, "mock-anchor-sep38-price");
@@ -33,7 +35,9 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  const sellAmt = sellAmountParam ? Number(sellAmountParam) : Number(buyAmountParam) / MOCK_EURC_TRY_RATE;
+  const fx = await getEurTryRate();
+  const rate = fx.rate;
+  const sellAmt = sellAmountParam ? Number(sellAmountParam) : Number(buyAmountParam) / rate;
   if (amountOutOfRange(sellAmt)) {
     return NextResponse.json(
       {
@@ -44,12 +48,14 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  const buyAmt = sellAmountParam ? Number(sellAmountParam) * MOCK_EURC_TRY_RATE : Number(buyAmountParam);
+  const buyAmt = sellAmountParam ? Number(sellAmountParam) * rate : Number(buyAmountParam);
   const fee = (sellAmt * 0.005).toFixed(7);
   return NextResponse.json({
-    price: MOCK_EURC_TRY_RATE.toFixed(7),
+    price: rate.toFixed(7),
     sell_amount: sellAmt.toFixed(7),
-    buy_amount: (buyAmt - Number(fee) * MOCK_EURC_TRY_RATE).toFixed(7),
+    buy_amount: (buyAmt - Number(fee) * rate).toFixed(7),
     fee: { total: fee, asset: `stellar:EURC:${EURC_ISSUER}`, details: [{ name: "Mock anchor fee", amount: fee }] },
+    rate_source: fx.source,
+    rate_as_of: fx.asOf,
   });
 }

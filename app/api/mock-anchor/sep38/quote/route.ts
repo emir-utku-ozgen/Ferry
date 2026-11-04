@@ -1,13 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkRateLimit, rateLimitResponse } from "@/lib/rateLimit";
 import { verifyBearerToken } from "@/lib/mockAnchor/auth";
-import { amountOutOfRange, EURC_ISSUER, getTryIssuerKeypair, MIN_EURC_AMOUNT, MAX_EURC_AMOUNT, MOCK_EURC_TRY_RATE } from "@/lib/mockAnchor/config";
+import { amountOutOfRange, EURC_ISSUER, getTryIssuerKeypair, MIN_EURC_AMOUNT, MAX_EURC_AMOUNT } from "@/lib/mockAnchor/config";
+import { getEurTryRate } from "@/lib/mockAnchor/fxRate";
 import { quotes, type MockQuote } from "@/lib/mockAnchor/state";
 
 /**
  * POST /api/mock-anchor/sep38/quote — firm, executable, time-limited quote
  * (requires a SEP-10 session). Direct port of mock-anchor/server.js's
- * `/sep38/quote` handler — same 5-minute validity window, same 0.5% mock fee.
+ * `/sep38/quote` handler — same 5-minute validity window, same 0.5% mock fee,
+ * but priced at the live EUR/TRY reference rate (lib/mockAnchor/fxRate.ts).
+ * The rate is locked into the quote, so settlement uses exactly what the
+ * sender was shown.
  */
 export async function POST(req: NextRequest) {
   const rateLimit = checkRateLimit(req, "mock-anchor-sep38-quote");
@@ -32,7 +36,9 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const sellAmt = sellAmountParam ? Number(sellAmountParam) : Number(buyAmountParam) / MOCK_EURC_TRY_RATE;
+  const fx = await getEurTryRate();
+  const rate = fx.rate;
+  const sellAmt = sellAmountParam ? Number(sellAmountParam) : Number(buyAmountParam) / rate;
   if (amountOutOfRange(sellAmt)) {
     return NextResponse.json(
       {
@@ -44,12 +50,12 @@ export async function POST(req: NextRequest) {
   }
 
   const fee = (sellAmt * 0.005).toFixed(7);
-  const buyAmt = (sellAmt * MOCK_EURC_TRY_RATE - Number(fee) * MOCK_EURC_TRY_RATE).toFixed(7);
+  const buyAmt = (sellAmt * rate - Number(fee) * rate).toFixed(7);
   const id = `mockq_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
   const quote: MockQuote = {
     id,
     expires_at: new Date(Date.now() + 5 * 60_000).toISOString(),
-    price: MOCK_EURC_TRY_RATE.toFixed(7),
+    price: rate.toFixed(7),
     sell_asset: sellAsset,
     buy_asset: buyAsset,
     sell_amount: sellAmt.toFixed(7),
@@ -57,5 +63,5 @@ export async function POST(req: NextRequest) {
     fee: { total: fee, asset: sellAsset, details: [{ name: "Mock anchor fee", amount: fee }] },
   };
   quotes.set(id, quote);
-  return NextResponse.json(quote);
+  return NextResponse.json({ ...quote, rate_source: fx.source, rate_as_of: fx.asOf });
 }
