@@ -24,6 +24,22 @@ import { ApiError } from "@/lib/stellar/client/http";
 import type { FlowError, KycStatus } from "@/components/StatusTracker";
 import { EURC_ISSUER } from "@/lib/stellar/config";
 import Spinner from "@/components/Spinner";
+import { explorerTxUrl } from "@/lib/stellar/explorer";
+
+/** Opens the transaction on Stellar Expert so anyone can verify it on-chain. */
+function ExplorerButton({ hash, label = "View on Stellar Expert" }: { hash: string; label?: string }) {
+  return (
+    <a
+      href={explorerTxUrl(hash, NETWORK_PASSPHRASE)}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-[11px] font-semibold text-emerald-300 transition-colors hover:border-emerald-400/60 hover:bg-emerald-500/20 hover:text-emerald-200"
+    >
+      {label}
+      <span aria-hidden="true">↗</span>
+    </a>
+  );
+}
 
 // EURC listed first — it's the actual settlement asset for the EUR(EURC)
 // -> TRY corridor's SEP-31 leg (see mock-anchor/), the corridor this
@@ -608,7 +624,8 @@ function Sep31Panel({ anchorDomain, publicKey, token, lockedQuote, kycStatus, on
         <div className="animate-fade-in rounded-xl border border-emerald-500/20 bg-emerald-500/[0.06] p-3 text-xs text-zinc-300">
           <p className="font-semibold text-emerald-300">✓ Payment submitted from your wallet</p>
           <p className="mt-1 break-all font-mono text-[11px] text-zinc-400">{paymentTxHash}</p>
-          <p className="mt-1 text-[11px] text-zinc-600">Waiting for the anchor to detect and confirm it below.</p>
+          <ExplorerButton hash={paymentTxHash} />
+          <p className="mt-2 text-[11px] text-zinc-600">Waiting for the anchor to detect and confirm it below.</p>
         </div>
       )}
 
@@ -620,12 +637,15 @@ function Sep31Panel({ anchorDomain, publicKey, token, lockedQuote, kycStatus, on
             <div className="mt-2 border-t border-white/[0.08] pt-2">
               <p className="text-[11px] font-semibold text-emerald-300">✓ Settlement payment confirmed on-chain</p>
               <p className="mt-1 break-all font-mono text-[11px] text-zinc-400">{status.stellar_transaction_id}</p>
+              <ExplorerButton hash={status.stellar_transaction_id} />
             </div>
           )}
           {status.payout_stellar_transaction_id && (
-            <p className="mt-1 break-all font-mono text-[11px] text-zinc-600">
-              payout {status.payout_stellar_transaction_id}
-            </p>
+            <div className="mt-2 border-t border-white/[0.08] pt-2">
+              <p className="text-[11px] font-semibold text-emerald-300">✓ TRY payout sent to recipient</p>
+              <p className="mt-1 break-all font-mono text-[11px] text-zinc-400">{status.payout_stellar_transaction_id}</p>
+              <ExplorerButton hash={status.payout_stellar_transaction_id} label="View payout on Stellar Expert" />
+            </div>
           )}
         </div>
       )}
