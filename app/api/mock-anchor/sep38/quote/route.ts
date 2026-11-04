@@ -62,6 +62,6 @@ export async function POST(req: NextRequest) {
     buy_amount: buyAmt,
     fee: { total: fee, asset: sellAsset, details: [{ name: "Mock anchor fee", amount: fee }] },
   };
-  quotes.set(id, quote);
+  await quotes.set(id, quote);
   return NextResponse.json({ ...quote, rate_source: fx.source, rate_as_of: fx.asOf });
 }
