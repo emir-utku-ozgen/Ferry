@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
   if (!auth) return NextResponse.json({ error: "Missing Bearer token" }, { status: 401 });
 
   const type = req.nextUrl.searchParams.get("type") ?? undefined;
-  const existing = customers.get(customerKey(auth.account, type));
+  const existing = await customers.get(customerKey(auth.account, type));
   if (existing) return NextResponse.json(existing);
 
   const fields = type === "sep31-receiver" ? RECEIVER_FIELDS : SENDER_FIELDS;
@@ -76,7 +76,7 @@ export async function PUT(req: NextRequest) {
     };
   }
 
-  customers.set(customerKey(auth.account, type), {
+  await customers.set(customerKey(auth.account, type), {
     status: "ACCEPTED",
     id: auth.account,
     ...(mockMaskedFields ? { mock_masked_fields: mockMaskedFields } : {}),

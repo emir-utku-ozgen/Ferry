@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { ensureSigningAccountFunded, getSigningKeypair, getTryIssuerKeypair } from "@/lib/mockAnchor/config";
+import { storeBackend } from "@/lib/mockAnchor/store";
 
 /**
  * GET /api/mock-anchor/health — mirrors mock-anchor/server.js's own
@@ -24,6 +25,8 @@ export async function GET() {
       signing_key_pinned: Boolean(process.env.MOCK_ANCHOR_SIGNING_SECRET),
       try_issuer_pinned: Boolean(process.env.MOCK_ANCHOR_TRY_ISSUER_SECRET),
       receiving_account_funded_and_trusting: readiness.fundedAndTrusting,
+      // "memory" on Vercel means state is per-instance and multi-step flows can break.
+      state_store: storeBackend(),
       ...(readiness.reason ? { receiving_account_issue: readiness.reason } : {}),
     });
   } catch (err) {

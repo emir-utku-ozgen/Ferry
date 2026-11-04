@@ -20,9 +20,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   if (!auth) return NextResponse.json({ error: "Missing Bearer token" }, { status: 401 });
 
   const { id } = await params;
-  const tx = transactions.get(id);
+  const tx = await transactions.get(id);
   if (!tx) return NextResponse.json({ error: "Transaction not found" }, { status: 404 });
 
+  const before = JSON.stringify(tx);
   await checkAndSettleTransaction(tx);
+  if (JSON.stringify(tx) !== before) await transactions.set(id, tx);
   return NextResponse.json({ transaction: tx });
 }

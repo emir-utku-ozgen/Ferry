@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkRateLimit, rateLimitResponse } from "@/lib/rateLimit";
 import { verifyBearerToken } from "@/lib/mockAnchor/auth";
-import { customers } from "@/lib/mockAnchor/state";
+import { CUSTOMER_TYPES, customerKey, customers } from "@/lib/mockAnchor/state";
 
 /**
  * DELETE /api/mock-anchor/sep12/customer/:id — removes a previously
@@ -21,8 +21,6 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   if (!auth) return NextResponse.json({ error: "Missing Bearer token" }, { status: 401 });
 
   const { id } = await params;
-  for (const key of [...customers.keys()]) {
-    if (key.startsWith(`${id}:`)) customers.delete(key);
-  }
+  await Promise.all(CUSTOMER_TYPES.map((type) => customers.delete(customerKey(id, type))));
   return NextResponse.json({ ok: true });
 }

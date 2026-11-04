@@ -1,4 +1,5 @@
 import type { Sep38Fee } from "@/lib/stellar/client/sep38Client";
+import { createCollection } from "@/lib/mockAnchor/store";
 
 /**
  * In-memory state for the embedded mock anchor (`app/api/mock-anchor/*`).
@@ -56,12 +57,18 @@ export interface MockTransaction {
   stellar_transaction_id?: string;
 }
 
+// Backed by Redis when one is connected (shared across serverless
+// instances), otherwise by an in-memory Map — see lib/mockAnchor/store.ts.
+const DAY = 24 * 60 * 60;
 /** "account:type" -> customer record. Namespaced by role — see customerKey() below. */
-export const customers = new Map<string, MockCustomerRecord>();
-/** quote id -> quote. */
-export const quotes = new Map<string, MockQuote>();
+export const customers = createCollection<MockCustomerRecord>("customers", 7 * DAY);
+/** quote id -> quote. Quotes expire after 5 minutes; kept an hour so expiry is reported as such. */
+export const quotes = createCollection<MockQuote>("quotes", 60 * 60);
 /** transaction id -> transaction. */
-export const transactions = new Map<string, MockTransaction>();
+export const transactions = createCollection<MockTransaction>("transactions", 7 * DAY);
+
+/** Every SEP-12 role a record can be stored under, for account-wide deletes. */
+export const CUSTOMER_TYPES = ["sep31-sender", "sep31-receiver"] as const;
 
 /**
  * Namespaces a SEP-12 customer record by role, not just by Stellar account.

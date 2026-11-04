@@ -32,12 +32,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: `Asset [${assetCode}] not supported by this mock anchor — only EURC` }, { status: 400 });
   }
 
-  const customer = customers.get(customerKey(auth.account));
+  const customer = await customers.get(customerKey(auth.account));
   if (!customer || customer.status !== "ACCEPTED") {
     return NextResponse.json({ error: "Sender KYC not accepted — complete SEP-12 first" }, { status: 400 });
   }
 
-  const quote = quoteId ? quotes.get(quoteId) : null;
+  const quote = quoteId ? await quotes.get(quoteId) : null;
   if (quoteId && !quote) {
     return NextResponse.json({ error: "quote_id not found or already expired from this mock anchor's memory" }, { status: 400 });
   }
@@ -88,7 +88,7 @@ export async function POST(req: NextRequest) {
     sender: auth.account,
     created_at: new Date().toISOString(),
   };
-  transactions.set(id, tx);
+  await transactions.set(id, tx);
 
   return NextResponse.json({
     id,
