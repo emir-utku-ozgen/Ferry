@@ -177,8 +177,26 @@ export default function Home() {
         />
       )}
 
-      <footer className="border-t border-white/[0.08] px-8 py-6 text-center text-xs text-zinc-600">
-        Stellar Testnet only · Non-custodial by design
+      <footer className="flex flex-wrap items-center justify-center gap-x-3 gap-y-2 border-t border-white/[0.08] px-8 py-6 text-center text-xs text-zinc-600">
+        <span>Stellar Testnet only · Non-custodial by design</span>
+        <span aria-hidden="true">·</span>
+        <a
+          href="https://ferry-docs.vercel.app"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-zinc-400 underline-offset-4 transition-colors hover:text-zinc-200 hover:underline"
+        >
+          Documentation
+        </a>
+        <span aria-hidden="true">·</span>
+        <a
+          href="https://github.com/emir-utku-ozgen/Ferry"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-zinc-400 underline-offset-4 transition-colors hover:text-zinc-200 hover:underline"
+        >
+          GitHub
+        </a>
       </footer>
     </div>
   );
