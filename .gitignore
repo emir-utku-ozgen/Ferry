@@ -43,3 +43,7 @@ next-env.d.ts
 CLAUDE.md
 tsconfig.tsbuildinfo
 .env.local
+
+# docs site build output
+/docs-site/node_modules
+/docs-site/dist
