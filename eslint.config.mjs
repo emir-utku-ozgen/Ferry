@@ -16,6 +16,9 @@ const eslintConfig = defineConfig([
     // (see mock-anchor/README.md) — not part of the Next.js/TypeScript
     // app, so it isn't held to this config's TS-oriented rules.
     "mock-anchor/**",
+    // docs-site/ is a standalone static-site generator for docs/ (see
+    // docs-site/README.md), with its own dependencies and build output.
+    "docs-site/**",
   ]),
 ]);
 
