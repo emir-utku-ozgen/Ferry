@@ -44,7 +44,7 @@ export default function RemittanceFlow({ publicKey, anchorDomain, token, onAuthe
         address: publicKey,
       });
       if (signed.error) {
-        throw new Error(freighterErrorMessage(signed.error, "Freighter declined to sign the SEP-10 challenge"));
+        throw new Error(freighterErrorMessage(signed.error, "Varial declined to sign the SEP-10 challenge"));
       }
 
       const newToken = await exchangeSep10Token(anchorDomain, signed.signedTxXdr);
@@ -92,7 +92,7 @@ export default function RemittanceFlow({ publicKey, anchorDomain, token, onAuthe
             className="flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-black transition-all duration-150 hover:bg-zinc-100 active:scale-[0.98] disabled:opacity-60 disabled:active:scale-100"
           >
             {authenticating && <Spinner className="h-3.5 w-3.5 text-black" />}
-            {authenticating ? "Waiting for Freighter signature…" : "Authenticate (SEP-10)"}
+            {authenticating ? "Waiting for Varial signature…" : "Authenticate (SEP-10)"}
           </button>
           {error && <p className="text-xs text-red-400">{error}</p>}
         </div>

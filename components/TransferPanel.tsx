@@ -288,7 +288,7 @@ function Sep31Panel({ anchorDomain, publicKey, token, lockedQuote, kycStatus, on
       if (signed.error) {
         setFlowError({
           kind: "cancelled",
-          message: freighterErrorMessage(signed.error, "The Freighter signing request was closed before it was approved."),
+          message: freighterErrorMessage(signed.error, "The Varial signing request was closed before it was approved."),
           retry: establishTrustline,
         });
         return;
@@ -343,7 +343,7 @@ function Sep31Panel({ anchorDomain, publicKey, token, lockedQuote, kycStatus, on
       if (signed.error) {
         setFlowError({
           kind: "cancelled",
-          message: freighterErrorMessage(signed.error, "The Freighter signing request was closed before it was approved."),
+          message: freighterErrorMessage(signed.error, "The Varial signing request was closed before it was approved."),
           retry: payNow,
         });
         return;
@@ -581,7 +581,7 @@ function Sep31Panel({ anchorDomain, publicKey, token, lockedQuote, kycStatus, on
         <div className="animate-fade-in rounded-xl border border-amber-500/30 bg-amber-500/10 p-3">
           <p className="text-xs font-semibold text-amber-300">Trustline required before paying</p>
           <p className="mt-1 text-[11px] leading-relaxed text-amber-200/80">
-            This account has no trustline to {assetCode} yet. Establishing it only asks Freighter to sign a
+            This account has no trustline to {assetCode} yet. Establishing it only asks Varial to sign a
             <code className="mx-1 rounded bg-black/30 px-1 py-0.5 font-mono">ChangeTrust</code>
             operation and does not move any funds.
           </p>
@@ -591,7 +591,7 @@ function Sep31Panel({ anchorDomain, publicKey, token, lockedQuote, kycStatus, on
             className="mt-3 flex items-center gap-2 rounded-lg border border-amber-400/40 bg-amber-400/10 px-3 py-1.5 text-xs font-semibold text-amber-200 transition-all duration-150 hover:bg-amber-400/20 active:scale-[0.98] disabled:opacity-50"
           >
             {establishingTrustline && <Spinner className="h-3 w-3 text-amber-200" />}
-            {establishingTrustline ? "Waiting for Freighter signature…" : `Establish trustline for ${assetCode}`}
+            {establishingTrustline ? "Waiting for Varial signature…" : `Establish trustline for ${assetCode}`}
           </button>
         </div>
       )}
@@ -607,7 +607,7 @@ function Sep31Panel({ anchorDomain, publicKey, token, lockedQuote, kycStatus, on
           className="flex items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-black shadow-[0_0_18px_-6px_rgba(16,185,129,0.6)] transition-all duration-150 hover:bg-emerald-400 active:scale-[0.98] disabled:opacity-60 disabled:active:scale-100"
         >
           {paying && <Spinner className="h-3.5 w-3.5 text-black" />}
-          {paying ? "Waiting for Freighter signature…" : "Pay with Freighter"}
+          {paying ? "Waiting for Varial signature…" : "Pay with Varial"}
         </button>
       )}
 

@@ -65,18 +65,18 @@ export default function WalletConnect({ onConnect, onDisconnect }: WalletConnect
     try {
       const connected = await isConnected();
       if (connected.error || !connected.isConnected) {
-        throw new Error("Freighter extension not detected. Install it from freighter.app.");
+        throw new Error("Varial extension not detected. Install it from freighter.app.");
       }
 
       const access = await requestAccess();
-      if (access.error) throw new Error(freighterErrorMessage(access.error, "Freighter declined the connection request"));
+      if (access.error) throw new Error(freighterErrorMessage(access.error, "Varial declined the connection request"));
 
       const network = await getNetworkDetails();
       // If EXPECTED_FREIGHTER_NETWORK is null, NETWORK_PASSPHRASE is a
       // custom/unrecognized value (e.g. a private network) — skip this
       // check rather than guessing, instead of wrongly blocking it.
       if (!network.error && network.network && EXPECTED_FREIGHTER_NETWORK && network.network !== EXPECTED_FREIGHTER_NETWORK) {
-        throw new Error(`Freighter is set to ${network.network}. Switch it to ${EXPECTED_FREIGHTER_NETWORK} to use Ferry.`);
+        throw new Error(`Varial is set to ${network.network}. Switch it to ${EXPECTED_FREIGHTER_NETWORK} to use Ferry.`);
       }
 
       setPublicKey(access.address);
@@ -111,7 +111,7 @@ export default function WalletConnect({ onConnect, onDisconnect }: WalletConnect
       }
 
       setNetworkWarning(
-        network && network !== "TESTNET" ? `Freighter switched to ${network}. Switch back to Testnet to continue.` : null
+        network && network !== "TESTNET" ? `Varial switched to ${network}. Switch back to Testnet to continue.` : null
       );
     });
 
@@ -149,7 +149,7 @@ export default function WalletConnect({ onConnect, onDisconnect }: WalletConnect
         className="flex items-center gap-2 rounded-full bg-white px-5 py-2.5 text-sm font-semibold text-black shadow-[0_0_20px_-6px_rgba(255,255,255,0.4)] transition-all duration-150 hover:bg-zinc-100 active:scale-[0.97] disabled:opacity-60 disabled:active:scale-100"
       >
         {connecting && <Spinner className="h-3.5 w-3.5 text-black" />}
-        {connecting ? "Connecting…" : "Connect Freighter Wallet"}
+        {connecting ? "Connecting…" : "Connect Varial Wallet"}
       </button>
       {error && <p className="max-w-xs text-right text-xs text-red-400">{error}</p>}
     </div>
