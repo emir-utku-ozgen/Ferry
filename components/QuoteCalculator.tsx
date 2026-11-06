@@ -6,6 +6,8 @@ import { ApiError } from "@/lib/stellar/client/http";
 import { EURC_ISSUER, MOCK_TRY_ISSUER } from "@/lib/stellar/config";
 import { fetchAnchorCurrencies, findCurrencyAsset, type AnchorCurrency } from "@/lib/stellar/client/anchorClient";
 import Spinner from "@/components/Spinner";
+import SpecularButton from "@/components/ui/SpecularButton";
+import FerryCard from "@/components/ui/FerryCard";
 
 // EUR → TRY is Ferry's showcased corridor (sender pays EUR, recipient is
 // paid out in Turkish Lira). The EUR leg is represented by Circle's real
@@ -270,7 +272,7 @@ export default function QuoteCalculator({ anchorDomain, token, lockedQuote, onQu
   }
 
   return (
-    <div className="w-full rounded-2xl border border-white/[0.08] bg-white/[0.03] p-6 shadow-2xl shadow-black/40 backdrop-blur-xl transition-colors duration-200 hover:border-white/[0.12]">
+    <FerryCard>
       <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-400">Rate Calculator · EUR → TRY</h2>
 
       <form onSubmit={handleSubmit} className="mt-4 flex flex-col gap-2">
@@ -327,14 +329,10 @@ export default function QuoteCalculator({ anchorDomain, token, lockedQuote, onQu
           </div>
         </div>
 
-        <button
-          type="submit"
-          disabled={loading}
-          className="mt-2 flex items-center justify-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-black transition-all duration-150 hover:bg-zinc-100 active:scale-[0.98] disabled:opacity-60 disabled:active:scale-100"
-        >
-          {loading && <Spinner className="h-3.5 w-3.5 text-black" />}
+        <SpecularButton type="submit" disabled={loading} size="sm" radius={12} className="mt-2 w-full">
+          {loading && <Spinner className="h-3.5 w-3.5 text-white" />}
           {loading ? "Fetching rate…" : "Get Quote"}
-        </button>
+        </SpecularButton>
       </form>
 
       {error && <p className="animate-fade-in mt-4 text-xs leading-relaxed text-red-400">{error}</p>}
@@ -408,6 +406,6 @@ export default function QuoteCalculator({ anchorDomain, token, lockedQuote, onQu
         Rates are fetched live from the anchor&apos;s SEP-38 quote server ({anchorDomain}) and are indicative only
         until locked. The net amount shown is exactly what the recipient receives — fees are already subtracted.
       </p>
-    </div>
+    </FerryCard>
   );
 }

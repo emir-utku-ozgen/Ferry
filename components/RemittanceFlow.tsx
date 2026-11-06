@@ -5,6 +5,8 @@ import { signTransaction } from "@stellar/freighter-api";
 import { exchangeSep10Token, fetchSep10Challenge } from "@/lib/stellar/client/sep10Client";
 import { freighterErrorMessage } from "@/lib/stellar/freighterError";
 import Spinner from "@/components/Spinner";
+import SpecularButton from "@/components/ui/SpecularButton";
+import FerryCard from "@/components/ui/FerryCard";
 
 interface RemittanceFlowProps {
   publicKey: string | null;
@@ -44,7 +46,7 @@ export default function RemittanceFlow({ publicKey, anchorDomain, token, onAuthe
         address: publicKey,
       });
       if (signed.error) {
-        throw new Error(freighterErrorMessage(signed.error, "Freighter declined to sign the SEP-10 challenge"));
+        throw new Error(freighterErrorMessage(signed.error, "Varial declined to sign the SEP-10 challenge"));
       }
 
       const newToken = await exchangeSep10Token(anchorDomain, signed.signedTxXdr);
@@ -57,7 +59,7 @@ export default function RemittanceFlow({ publicKey, anchorDomain, token, onAuthe
   }, [publicKey, anchorDomain, onAuthenticated]);
 
   return (
-    <div className="w-full rounded-2xl border border-white/[0.08] bg-white/[0.03] p-6 shadow-2xl shadow-black/40 backdrop-blur-xl transition-colors duration-200 hover:border-white/[0.12]">
+    <FerryCard>
       <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-400">Remittance Flow</h2>
 
       <ol className="mt-4 flex flex-col gap-3">
@@ -86,14 +88,10 @@ export default function RemittanceFlow({ publicKey, anchorDomain, token, onAuthe
 
       {publicKey && !token && (
         <div className="mt-4 flex flex-col items-start gap-2">
-          <button
-            onClick={authenticate}
-            disabled={authenticating}
-            className="flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-black transition-all duration-150 hover:bg-zinc-100 active:scale-[0.98] disabled:opacity-60 disabled:active:scale-100"
-          >
-            {authenticating && <Spinner className="h-3.5 w-3.5 text-black" />}
-            {authenticating ? "Waiting for Freighter signature…" : "Authenticate (SEP-10)"}
-          </button>
+          <SpecularButton onClick={authenticate} disabled={authenticating} size="sm" radius={12}>
+            {authenticating && <Spinner className="h-3.5 w-3.5 text-white" />}
+            {authenticating ? "Waiting for Varial signature…" : "Authenticate (SEP-10)"}
+          </SpecularButton>
           {error && <p className="text-xs text-red-400">{error}</p>}
         </div>
       )}
@@ -109,6 +107,6 @@ export default function RemittanceFlow({ publicKey, anchorDomain, token, onAuthe
         Ferry is strictly non-custodial: identity documents and funds always stay with the licensed anchor via
         its hosted (SEP-24) or direct (SEP-31) handoff — this app only orchestrates the handshake.
       </p>
-    </div>
+    </FerryCard>
   );
 }

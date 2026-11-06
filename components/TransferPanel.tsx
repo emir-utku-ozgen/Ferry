@@ -25,6 +25,7 @@ import type { FlowError, KycStatus } from "@/components/StatusTracker";
 import { EURC_ISSUER } from "@/lib/stellar/config";
 import Spinner from "@/components/Spinner";
 import { explorerTxUrl } from "@/lib/stellar/explorer";
+import SpecularButton from "@/components/ui/SpecularButton";
 
 /** Opens the transaction on Stellar Expert so anyone can verify it on-chain. */
 function ExplorerButton({ hash, label = "View on Stellar Expert" }: { hash: string; label?: string }) {
@@ -288,7 +289,7 @@ function Sep31Panel({ anchorDomain, publicKey, token, lockedQuote, kycStatus, on
       if (signed.error) {
         setFlowError({
           kind: "cancelled",
-          message: freighterErrorMessage(signed.error, "The Freighter signing request was closed before it was approved."),
+          message: freighterErrorMessage(signed.error, "The Varial signing request was closed before it was approved."),
           retry: establishTrustline,
         });
         return;
@@ -343,7 +344,7 @@ function Sep31Panel({ anchorDomain, publicKey, token, lockedQuote, kycStatus, on
       if (signed.error) {
         setFlowError({
           kind: "cancelled",
-          message: freighterErrorMessage(signed.error, "The Freighter signing request was closed before it was approved."),
+          message: freighterErrorMessage(signed.error, "The Varial signing request was closed before it was approved."),
           retry: payNow,
         });
         return;
@@ -521,14 +522,16 @@ function Sep31Panel({ anchorDomain, publicKey, token, lockedQuote, kycStatus, on
           Complete SEP-12 KYC to enable sending
         </button>
       ) : (
-        <button
+        <SpecularButton
           onClick={send}
           disabled={loading || (lockedQuote != null && quoteExpired)}
-          className="flex items-center justify-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-black transition-all duration-150 hover:bg-zinc-100 active:scale-[0.98] disabled:opacity-60 disabled:active:scale-100"
+          size="sm"
+          radius={12}
+          className="w-full"
         >
-          {loading && <Spinner className="h-3.5 w-3.5 text-black" />}
+          {loading && <Spinner className="h-3.5 w-3.5 text-white" />}
           {loading ? "Sending…" : "Send via SEP-31"}
-        </button>
+        </SpecularButton>
       )}
 
       <p className="text-[11px] leading-relaxed text-zinc-600">
@@ -581,7 +584,7 @@ function Sep31Panel({ anchorDomain, publicKey, token, lockedQuote, kycStatus, on
         <div className="animate-fade-in rounded-xl border border-amber-500/30 bg-amber-500/10 p-3">
           <p className="text-xs font-semibold text-amber-300">Trustline required before paying</p>
           <p className="mt-1 text-[11px] leading-relaxed text-amber-200/80">
-            This account has no trustline to {assetCode} yet. Establishing it only asks Freighter to sign a
+            This account has no trustline to {assetCode} yet. Establishing it only asks Varial to sign a
             <code className="mx-1 rounded bg-black/30 px-1 py-0.5 font-mono">ChangeTrust</code>
             operation and does not move any funds.
           </p>
@@ -591,7 +594,7 @@ function Sep31Panel({ anchorDomain, publicKey, token, lockedQuote, kycStatus, on
             className="mt-3 flex items-center gap-2 rounded-lg border border-amber-400/40 bg-amber-400/10 px-3 py-1.5 text-xs font-semibold text-amber-200 transition-all duration-150 hover:bg-amber-400/20 active:scale-[0.98] disabled:opacity-50"
           >
             {establishingTrustline && <Spinner className="h-3 w-3 text-amber-200" />}
-            {establishingTrustline ? "Waiting for Freighter signature…" : `Establish trustline for ${assetCode}`}
+            {establishingTrustline ? "Waiting for Varial signature…" : `Establish trustline for ${assetCode}`}
           </button>
         </div>
       )}
@@ -601,14 +604,21 @@ function Sep31Panel({ anchorDomain, publicKey, token, lockedQuote, kycStatus, on
       )}
 
       {result && !paymentTxHash && !flowError && (!trustlineRequiredForPayment || trustlineStatus === "present") && (
-        <button
+        // Final, money-moving action: same glass button, emerald-tinted so it still stands out.
+        <SpecularButton
           onClick={payNow}
           disabled={paying}
-          className="flex items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-black shadow-[0_0_18px_-6px_rgba(16,185,129,0.6)] transition-all duration-150 hover:bg-emerald-400 active:scale-[0.98] disabled:opacity-60 disabled:active:scale-100"
+          size="sm"
+          radius={12}
+          tint="#10b981"
+          tintOpacity={0.18}
+          lineColor="#6ee7b7"
+          baseColor="#047857"
+          className="w-full"
         >
-          {paying && <Spinner className="h-3.5 w-3.5 text-black" />}
-          {paying ? "Waiting for Freighter signature…" : "Pay with Freighter"}
-        </button>
+          {paying && <Spinner className="h-3.5 w-3.5 text-white" />}
+          {paying ? "Waiting for Varial signature…" : "Pay with Varial"}
+        </SpecularButton>
       )}
 
       {result && !flowError && (

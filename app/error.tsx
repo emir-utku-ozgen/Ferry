@@ -30,7 +30,7 @@ export default function GlobalError({ error, reset }: { error: Error & { digest?
         <p className="text-sm font-semibold text-red-300">Something went wrong</p>
         <p className="mt-2 text-[13px] leading-relaxed text-red-200/80">
           This wasn&apos;t one of the anticipated failure states — it&apos;s an unexpected error in the app itself.
-          No funds move without your Freighter signature, so nothing was sent as a result of this.
+          No funds move without your Varial signature, so nothing was sent as a result of this.
         </p>
         {error.digest && <p className="mt-3 font-mono text-[11px] text-red-300/60">Reference: {error.digest}</p>}
         <button

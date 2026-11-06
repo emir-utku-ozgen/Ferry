@@ -1,13 +1,13 @@
 "use client";
 
 import { useEffect, useReducer, useState } from "react";
+import Image from "next/image";
 import WalletConnect from "@/components/WalletConnect";
 import RemittanceFlow from "@/components/RemittanceFlow";
 import QuoteCalculator from "@/components/QuoteCalculator";
 import TransferPanel from "@/components/TransferPanel";
 import StatusTracker, { type FlowError, type KycStatus } from "@/components/StatusTracker";
 import KycModal from "@/components/KycModal";
-import NonCustodialNotice from "@/components/NonCustodialNotice";
 import { ANCHOR_DOMAIN } from "@/lib/stellar/config";
 import type { FirmQuote } from "@/lib/stellar/client/sep38Client";
 import { fetchCustomerInfo } from "@/lib/stellar/client/sep12Client";
@@ -92,36 +92,35 @@ export default function Home() {
 
   return (
     <div className="flex flex-1 flex-col">
-      <header className="sticky top-0 z-40 flex items-center justify-between border-b border-white/[0.08] bg-black/40 px-8 py-5 backdrop-blur-xl">
-        <div className="flex items-center gap-2.5">
-          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-400 to-sky-500 text-sm font-bold text-black">
-            F
-          </span>
-          <span className="text-lg font-semibold tracking-tight text-white">Ferry</span>
-          <span className="rounded-full border border-white/15 bg-white/[0.04] px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-zinc-400">
-            Testnet
-          </span>
+      <header className="sticky top-0 z-40 flex items-center justify-between bg-black/20 px-4 py-5 backdrop-blur-md sm:px-8">
+        <div className="flex items-center gap-3">
+          <Image src="/brand/ferry-logo.png" alt="" width={48} height={48} priority className="h-12 w-12" />
+          <span className="font-brand text-2xl tracking-tight text-white">Ferry</span>
         </div>
-        <WalletConnect onConnect={handleWalletUpdate} onDisconnect={handleDisconnect} />
+        <nav className="flex items-center gap-4 sm:gap-6">
+          <a
+            href="https://ferry-docs.vercel.app"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-sm text-zinc-400 transition-colors hover:text-white"
+          >
+            Docs
+          </a>
+          <WalletConnect onConnect={handleWalletUpdate} onDisconnect={handleDisconnect} />
+        </nav>
       </header>
 
-      <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-8 px-8 py-16">
+      <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-8 px-8 py-16 lg:mr-auto lg:ml-[max(0px,calc(50%-24rem-7.5rem))]">
         <div className="animate-fade-in">
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-400/20 bg-emerald-400/[0.06] px-3 py-1 text-[11px] font-medium text-emerald-300">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-            Non-custodial · Stellar Testnet
-          </span>
-          <h1 className="mt-4 bg-gradient-to-b from-white to-zinc-400 bg-clip-text text-3xl font-semibold tracking-tight text-transparent sm:text-4xl">
-            EUR → TRY remittances, orchestrated&nbsp;— never custodied.
+          <h1 className="text-4xl font-medium uppercase text-white sm:text-5xl">
+            <span className="block">Know what you send.</span>
+            <span className="block">Know what you receive.</span>
           </h1>
-          <p className="mt-3 max-w-xl text-base leading-7 text-zinc-400">
-            Ferry connects your Freighter wallet to Stellar-anchored remittance rails via SEP-10, SEP-12, SEP-24,
-            SEP-31 and SEP-38 to move EUR in and pay out Turkish Lira (TRY). Funds and identity documents always
-            stay with the licensed anchor.
+          <p className="mt-4 max-w-xl text-base leading-7 text-zinc-300">
+            See exactly how much lira your recipient gets and lock the rate before you pay. Licensed anchors move
+            the money on Stellar — Ferry never holds it.
           </p>
         </div>
-
-        <NonCustodialNotice />
 
         <div className="grid gap-6 sm:grid-cols-2">
           <RemittanceFlow
@@ -177,26 +176,24 @@ export default function Home() {
         />
       )}
 
-      <footer className="flex flex-wrap items-center justify-center gap-x-3 gap-y-2 border-t border-white/[0.08] px-8 py-6 text-center text-xs text-zinc-600">
-        <span>Stellar Testnet only · Non-custodial by design</span>
-        <span aria-hidden="true">·</span>
-        <a
-          href="https://ferry-docs.vercel.app"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-zinc-400 underline-offset-4 transition-colors hover:text-zinc-200 hover:underline"
-        >
-          Documentation
-        </a>
-        <span aria-hidden="true">·</span>
-        <a
-          href="https://github.com/emir-utku-ozgen/Ferry"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-zinc-400 underline-offset-4 transition-colors hover:text-zinc-200 hover:underline"
-        >
-          GitHub
-        </a>
+      <footer className="flex flex-col items-center gap-3 border-t border-white/[0.08] px-8 py-6 text-center text-xs text-zinc-600">
+        <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-2">
+          <span>Stellar Testnet only · Non-custodial by design</span>
+          <span aria-hidden="true">·</span>
+          <a
+            href="https://github.com/emir-utku-ozgen/Ferry"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-zinc-400 underline-offset-4 transition-colors hover:text-zinc-200 hover:underline"
+          >
+            GitHub
+          </a>
+        </div>
+        <p className="max-w-2xl leading-relaxed text-zinc-500">
+          Varial is only a Testnet signing tool, not a wallet for the sender or recipient. The sender pays in EUR
+          and the recipient is paid out in TRY, both handled by licensed anchors. Varial just signs SEP-10
+          authentication (and an optional trustline); no one ever holds or sends crypto directly.
+        </p>
       </footer>
     </div>
   );
