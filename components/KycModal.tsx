@@ -10,6 +10,7 @@ import {
 import { validateIban } from "@/lib/iban";
 import type { FlowError } from "@/components/StatusTracker";
 import Spinner from "@/components/Spinner";
+import SpecularButton from "@/components/ui/SpecularButton";
 
 interface KycModalProps {
   anchorDomain: string;
@@ -182,14 +183,10 @@ export default function KycModal({
 
                 {error && <p className="text-xs text-red-400">{error}</p>}
 
-                <button
-                  onClick={submit}
-                  disabled={submitting}
-                  className="flex items-center justify-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-black transition-all duration-150 hover:bg-zinc-100 active:scale-[0.98] disabled:opacity-60 disabled:active:scale-100"
-                >
-                  {submitting && <Spinner className="h-3.5 w-3.5 text-black" />}
+                <SpecularButton onClick={submit} disabled={submitting} size="sm" radius={12} className="w-full">
+                  {submitting && <Spinner className="h-3.5 w-3.5 text-white" />}
                   {submitting ? "Submitting…" : "Submit KYC Details"}
-                </button>
+                </SpecularButton>
               </div>
             )}
           </>

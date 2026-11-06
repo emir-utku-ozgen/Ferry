@@ -25,6 +25,7 @@ import type { FlowError, KycStatus } from "@/components/StatusTracker";
 import { EURC_ISSUER } from "@/lib/stellar/config";
 import Spinner from "@/components/Spinner";
 import { explorerTxUrl } from "@/lib/stellar/explorer";
+import SpecularButton from "@/components/ui/SpecularButton";
 
 /** Opens the transaction on Stellar Expert so anyone can verify it on-chain. */
 function ExplorerButton({ hash, label = "View on Stellar Expert" }: { hash: string; label?: string }) {
@@ -521,14 +522,16 @@ function Sep31Panel({ anchorDomain, publicKey, token, lockedQuote, kycStatus, on
           Complete SEP-12 KYC to enable sending
         </button>
       ) : (
-        <button
+        <SpecularButton
           onClick={send}
           disabled={loading || (lockedQuote != null && quoteExpired)}
-          className="flex items-center justify-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-black transition-all duration-150 hover:bg-zinc-100 active:scale-[0.98] disabled:opacity-60 disabled:active:scale-100"
+          size="sm"
+          radius={12}
+          className="w-full"
         >
-          {loading && <Spinner className="h-3.5 w-3.5 text-black" />}
+          {loading && <Spinner className="h-3.5 w-3.5 text-white" />}
           {loading ? "Sending…" : "Send via SEP-31"}
-        </button>
+        </SpecularButton>
       )}
 
       <p className="text-[11px] leading-relaxed text-zinc-600">
@@ -601,14 +604,21 @@ function Sep31Panel({ anchorDomain, publicKey, token, lockedQuote, kycStatus, on
       )}
 
       {result && !paymentTxHash && !flowError && (!trustlineRequiredForPayment || trustlineStatus === "present") && (
-        <button
+        // Final, money-moving action: same glass button, emerald-tinted so it still stands out.
+        <SpecularButton
           onClick={payNow}
           disabled={paying}
-          className="flex items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-black shadow-[0_0_18px_-6px_rgba(16,185,129,0.6)] transition-all duration-150 hover:bg-emerald-400 active:scale-[0.98] disabled:opacity-60 disabled:active:scale-100"
+          size="sm"
+          radius={12}
+          tint="#10b981"
+          tintOpacity={0.18}
+          lineColor="#6ee7b7"
+          baseColor="#047857"
+          className="w-full"
         >
-          {paying && <Spinner className="h-3.5 w-3.5 text-black" />}
+          {paying && <Spinner className="h-3.5 w-3.5 text-white" />}
           {paying ? "Waiting for Varial signature…" : "Pay with Varial"}
-        </button>
+        </SpecularButton>
       )}
 
       {result && !flowError && (

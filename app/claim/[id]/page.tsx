@@ -5,6 +5,7 @@ import { useParams, useSearchParams } from "next/navigation";
 import { fetchCustomerInfo, submitCustomerInfo, type Sep12CustomerInfo } from "@/lib/stellar/client/sep12Client";
 import { validateIban } from "@/lib/iban";
 import Spinner from "@/components/Spinner";
+import SpecularButton from "@/components/ui/SpecularButton";
 
 const RECEIVER_TYPE = "sep31-receiver";
 
@@ -253,14 +254,10 @@ export default function ClaimPage() {
               {submitError && <p className="text-xs text-red-400">{submitError}</p>}
 
               <div className="flex items-center gap-3">
-                <button
-                  onClick={submit}
-                  disabled={submitting || !fullName || !iban}
-                  className="flex items-center justify-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-black transition-all duration-150 hover:bg-zinc-100 active:scale-[0.98] disabled:opacity-60 disabled:active:scale-100"
-                >
-                  {submitting && <Spinner className="h-3.5 w-3.5 text-black" />}
+                <SpecularButton onClick={submit} disabled={submitting || !fullName || !iban} size="sm" radius={12}>
+                  {submitting && <Spinner className="h-3.5 w-3.5 text-white" />}
                   {submitting ? "Submitting…" : "Submit my details"}
-                </button>
+                </SpecularButton>
                 {editing && (
                   <button
                     onClick={() => {

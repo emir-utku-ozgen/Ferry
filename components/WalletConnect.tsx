@@ -6,6 +6,7 @@ import { Networks } from "@stellar/stellar-sdk";
 import { freighterErrorMessage } from "@/lib/stellar/freighterError";
 import { NETWORK_PASSPHRASE } from "@/lib/stellar/config";
 import Spinner from "@/components/Spinner";
+import SpecularButton from "@/components/ui/SpecularButton";
 
 interface WalletConnectProps {
   onConnect?: (publicKey: string) => void;
@@ -143,14 +144,10 @@ export default function WalletConnect({ onConnect, onDisconnect }: WalletConnect
 
   return (
     <div className="flex flex-col items-end gap-2">
-      <button
-        onClick={connect}
-        disabled={connecting}
-        className="flex items-center gap-2 rounded-full bg-white px-5 py-2.5 text-sm font-semibold text-black shadow-[0_0_20px_-6px_rgba(255,255,255,0.4)] transition-all duration-150 hover:bg-zinc-100 active:scale-[0.97] disabled:opacity-60 disabled:active:scale-100"
-      >
-        {connecting && <Spinner className="h-3.5 w-3.5 text-black" />}
+      <SpecularButton onClick={connect} disabled={connecting} size="sm" radius={999}>
+        {connecting && <Spinner className="h-3.5 w-3.5 text-white" />}
         {connecting ? "Connecting…" : "Connect Varial Wallet"}
-      </button>
+      </SpecularButton>
       {error && <p className="max-w-xs text-right text-xs text-red-400">{error}</p>}
     </div>
   );
