@@ -61,7 +61,7 @@ async function kycServer(domain: string): Promise<string> {
 export async function getCustomerInfo(
   domain: string,
   token: string,
-  params: { account: string; type?: string; lang?: string }
+  params: { account: string; type?: string; transaction_id?: string; lang?: string }
 ): Promise<Sep12CustomerInfo> {
   const base = await kycServer(domain);
   const url = new URL(`${base}/customer`);

@@ -312,7 +312,7 @@ desc="MOCK / SIMULATED representation of Turkish Lira. Not backed by any bank, n
     const account = requireBearerAccount(req, res);
     if (!account) return;
     const type = req.query.type;
-    const existing = customers.get(customerKey(account, type));
+    const existing = customers.get(customerKey(account, type, req.query.transaction_id));
     if (existing) return res.json(existing);
     const fields = type === "sep31-receiver" ? RECEIVER_FIELDS : SENDER_FIELDS;
     res.json({ status: "NEEDS_INFO", fields });
@@ -321,7 +321,7 @@ desc="MOCK / SIMULATED representation of Turkish Lira. Not backed by any bank, n
   app.put("/sep12/customer", (req, res) => {
     const account = requireBearerAccount(req, res);
     if (!account) return;
-    const { type } = req.body || {};
+    const { type, transaction_id: transactionId } = req.body || {};
 
     // A receiver record specifically requires a well-formed IBAN before
     // it can be accepted — enforced here too, not only by Ferry's own
@@ -353,7 +353,7 @@ desc="MOCK / SIMULATED representation of Turkish Lira. Not backed by any bank, n
     // Mock only: accepts an otherwise-valid submission and marks it
     // ACCEPTED immediately. No real identity verification happens here —
     // see README.md.
-    customers.set(customerKey(account, type), {
+    customers.set(customerKey(account, type, transactionId), {
       status: "ACCEPTED",
       id: account,
       ...(mockMaskedFields ? { mock_masked_fields: mockMaskedFields } : {}),

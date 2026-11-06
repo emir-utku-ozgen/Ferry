@@ -58,7 +58,7 @@ export default function ClaimPage() {
     // synchronously reset here — no fetch should start either.
     if (linkIncomplete) return;
     let cancelled = false;
-    fetchCustomerInfo(domain, token, account, RECEIVER_TYPE)
+    fetchCustomerInfo(domain, token, account, RECEIVER_TYPE, params.id)
       .then((info) => {
         if (!cancelled) setCustomer(info);
       })
@@ -71,7 +71,7 @@ export default function ClaimPage() {
     return () => {
       cancelled = true;
     };
-  }, [domain, token, account, linkIncomplete]);
+  }, [domain, token, account, linkIncomplete, params.id]);
 
   async function submit() {
     if (!domain || !token) return;
@@ -93,6 +93,8 @@ export default function ClaimPage() {
         token,
         {
           type: RECEIVER_TYPE,
+          // Scopes this recipient's details to this claim link only.
+          transaction_id: params.id,
           first_name: firstName,
           last_name: rest.join(" "),
           bank_account_number: ibanResult.normalized,
@@ -100,7 +102,7 @@ export default function ClaimPage() {
         },
         { transferId: params.id }
       );
-      const refreshed = await fetchCustomerInfo(domain, token, account!, RECEIVER_TYPE);
+      const refreshed = await fetchCustomerInfo(domain, token, account!, RECEIVER_TYPE, params.id);
       setCustomer(refreshed);
       setEditing(false);
       void result;

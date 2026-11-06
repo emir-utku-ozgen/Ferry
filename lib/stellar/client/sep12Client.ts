@@ -29,9 +29,16 @@ export async function fetchCustomerInfo(
   domain: string,
   token: string,
   account: string,
-  type?: string
+  type?: string,
+  transactionId?: string
 ): Promise<Sep12CustomerInfo> {
-  const query = new URLSearchParams({ domain, token, account, ...(type ? { type } : {}) });
+  const query = new URLSearchParams({
+    domain,
+    token,
+    account,
+    ...(type ? { type } : {}),
+    ...(transactionId ? { transaction_id: transactionId } : {}),
+  });
   const res = await fetch(`/api/sep12/customer?${query.toString()}`);
   return parseJsonOrThrow<Sep12CustomerInfo>(res);
 }

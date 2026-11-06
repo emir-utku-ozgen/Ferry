@@ -78,6 +78,9 @@ export const CUSTOMER_TYPES = ["sep31-sender", "sep31-receiver"] as const;
  * silently answer for a receiver's claim under the same account too,
  * skipping the IBAN form entirely.
  */
-export function customerKey(account: string, type?: string): string {
-  return `${account}:${type || "sep31-sender"}`;
+export function customerKey(account: string, type?: string, transactionId?: string): string {
+  const base = `${account}:${type || "sep31-sender"}`;
+  // A SEP-12 `transaction_id` scopes the record to a single transfer (e.g.
+  // one recipient per claim link) instead of one record per sender account.
+  return transactionId ? `${base}:${transactionId}` : base;
 }
