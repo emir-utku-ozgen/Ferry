@@ -9,8 +9,11 @@
  * receiver's claim under the same account too, skipping the IBAN form
  * entirely — the exact bug this closes.
  */
-function customerKey(account, type) {
-  return `${account}:${type || "sep31-sender"}`;
+function customerKey(account, type, transactionId) {
+  const base = `${account}:${type || "sep31-sender"}`;
+  // A SEP-12 `transaction_id` scopes the record to a single transfer (one
+  // recipient per claim link) instead of one record per sender account.
+  return transactionId ? `${base}:${transactionId}` : base;
 }
 
 module.exports = { customerKey };

@@ -5,7 +5,7 @@ import { checkRateLimit, rateLimitResponse } from "@/lib/rateLimit";
 import { withInstrumentation } from "@/lib/apiInstrumentation";
 
 /**
- * GET /api/sep12/customer?domain=...&token=...&account=...&type=...
+ * GET /api/sep12/customer?domain=...&token=...&account=...&type=...&transaction_id=...
  *
  * Looks up a SEP-12 customer record and required-field list at the
  * anchor. Drives both the sender's KYC modal and the recipient page's KYC
@@ -21,13 +21,16 @@ export async function GET(req: NextRequest) {
   const token = searchParams.get("token");
   const account = searchParams.get("account");
   const type = searchParams.get("type") ?? undefined;
+  // SEP-12 `transaction_id`: scopes the record to one transfer, so a
+  // recipient's details on one claim link don't carry over to the next.
+  const transactionId = searchParams.get("transaction_id") ?? undefined;
 
   if (!domain || !token || !account) {
     return NextResponse.json({ error: "`domain`, `token` and `account` query params are required" }, { status: 400 });
   }
 
   try {
-    const info = await getCustomerInfo(domain, token, { account, type });
+    const info = await getCustomerInfo(domain, token, { account, type, transaction_id: transactionId });
     return NextResponse.json(info);
   } catch (err) {
     const { status, body } = toApiErrorResponse(err, "Unknown SEP-12 error");
